@@ -1,0 +1,101 @@
+<div class="mrc-principal">
+  {{#unless puedeGrabar}}
+  <p class="mrc-aviso rojo">Este navegador no puede grabar. Usa Chrome, Edge o la app de escritorio de Foundry.</p>
+  {{/unless}}
+
+  {{! ─── Sesión ─── }}
+  <section class="mrc-bloque">
+    {{#if s}}
+    <header>
+      <h2>{{s.nombre}}</h2>
+      <p class="mrc-fase" data-fase="{{s.fase}}">{{faseTexto}}</p>
+    </header>
+    {{else}}
+    <header><h2>Sin sesión</h2></header>
+    {{/if}}
+
+    {{#if esGM}}
+      {{#unless s}}
+      <label class="mrc-campo">Nombre de la sesión
+        <input type="text" name="nombre" placeholder="Curse of Strahd 26">
+      </label>
+      <label class="mrc-check"><input type="checkbox" name="grabarFoundry" {{checked grabarFoundry}}> Grabar también la música, el ambiente y los efectos de Foundry</label>
+      <div class="mrc-botones"><button type="button" data-action="preparar" class="mrc-principal-btn">Preparar sesión</button></div>
+      {{else}}
+      <div class="mrc-botones">
+        {{#if (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="grabando" class="mrc-principal-btn">● Iniciar grabación</button>{{/if}}
+        {{#if (eq fase "grabando")}}<button type="button" data-action="fase" data-fase="pausada">❚❚ Pausar a todos</button>{{/if}}
+        {{#if (eq fase "pausada")}}<button type="button" data-action="fase" data-fase="grabando" class="mrc-principal-btn">▶ Reanudar a todos</button>{{/if}}
+        {{#if grabable}}{{#unless (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="finalizada">■ Finalizar</button>{{/unless}}{{/if}}
+        {{#if (or finalizada (eq fase "preparada"))}}<button type="button" data-action="cerrarSesion">Cerrar sesión</button>{{/if}}
+      </div>
+      {{/unless}}
+    {{/if}}
+  </section>
+
+  {{! ─── Tu grabación ─── }}
+  {{#if grabable}}
+  <section class="mrc-bloque">
+    <h3>Tu grabación</h3>
+    {{#if yo.grabando}}
+      <p class="mrc-grande">{{#if yo.pausa}}❚❚ En pausa{{else}}<span class="mrc-punto"></span> Grabando{{/if}} · {{minutos}}</p>
+      <div class="mrc-nivel"><span></span></div>
+      <label class="mrc-campo">Marcador (opcional)
+        <input type="text" name="marcador" placeholder="Momento para el tráiler">
+      </label>
+      <div class="mrc-botones">
+        <button type="button" data-action="marcar" data-tipo="momento">★ Marcar momento</button>
+        <button type="button" data-action="marcar" data-tipo="cortar">✂ Cortar esto</button>
+        {{#if yo.pausa}}
+        <button type="button" data-action="pausarMia" data-valor="0">▶ Reanudar mi micro</button>
+        {{else}}
+        <button type="button" data-action="pausarMia" data-valor="1">❚❚ Pausar mi micro</button>
+        {{/if}}
+      </div>
+      <p class="mrc-nota">«Cortar esto» avisa al editor para que quite ese momento antes de publicar. Mientras tu micro está en pausa se graba silencio.</p>
+      <button type="button" data-action="retirar" class="mrc-enlace">Retirar mi consentimiento y dejar de grabar</button>
+    {{else}}
+      <p class="mrc-nota">Solo se graba <strong>tu micrófono</strong>, en tu navegador. No sale de tu ordenador hasta que lo entregas. Usa <strong>cascos</strong>: con altavoces tu micro recogería a los demás.</p>
+      <label class="mrc-campo">Micrófono
+        <select name="micro">
+          {{#each micros}}<option value="{{id}}" {{#if elegido}}selected{{/if}}>{{nombre}}</option>{{else}}<option value="">Micrófono predeterminado</option>{{/each}}
+        </select>
+      </label>
+      <div class="mrc-nivel"><span></span></div>
+      <label class="mrc-check"><input type="checkbox" name="grabar" {{checked yo.acepta}}> Acepto que se grabe mi voz en esta sesión</label>
+      <label class="mrc-check"><input type="checkbox" name="publicar" {{checked yo.publica}}> Acepto que se publique en el podcast</label>
+      <div class="mrc-botones">
+        <button type="button" data-action="probar">Probar micro</button>
+        <button type="button" data-action="aceptar" class="mrc-principal-btn">{{#if yo.acepta}}Guardar{{else}}Aceptar{{/if}}</button>
+      </div>
+      {{#if yo.acepta}}<p class="mrc-nota">Listo. Empezarás a grabar cuando el máster inicie la sesión.</p>{{/if}}
+    {{/if}}
+    {{#if pocoEspacio}}<p class="mrc-aviso ambar">Queda poco espacio para grabar ({{libreGB}} GB). Cuatro horas ocupan unos 1,4 GB.</p>{{/if}}
+    {{#if yo.error}}<p class="mrc-aviso rojo">{{yo.error}}</p>{{/if}}
+  </section>
+  {{/if}}
+
+  {{! ─── Entrega ─── }}
+  {{#if finalizada}}{{#if hayLocal}}
+  <section class="mrc-bloque">
+    <h3>Entregar tu grabación</h3>
+    {{#if entrega}}
+      <div class="mrc-progreso"><span style="width: {{entrega.porcentaje}}%"></span></div>
+      <p class="mrc-nota">{{entrega.hechos}} de {{entrega.total}} archivos</p>
+      {{#if entrega.error}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/if}}
+      {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde">¡Entregada! Ya está en el servidor.</p>{{/if}}
+      {{#if (eq entrega.fin "descargar")}}<p class="mrc-aviso verde">Guardada. Envíasela al editor.</p>{{/if}}
+    {{else}}
+      <p class="mrc-nota">Sube tu pista al servidor de Foundry. Si se corta, vuelve a pulsar: solo sube lo que falte.</p>
+    {{/if}}
+    {{#unless entrega.enCurso}}
+    <div class="mrc-botones">
+      <button type="button" data-action="entregar" data-modo="subir" class="mrc-principal-btn" {{disabled (not puedeSubir)}}>Entregar</button>
+      <button type="button" data-action="entregar" data-modo="descargar">Descargar</button>
+    </div>
+    {{#unless puedeSubir}}<p class="mrc-nota">Tu rol no puede subir archivos. Pide al máster que lo active en Configurar permisos → Subir archivos, o descárgala y envíasela.</p>{{/unless}}
+    {{#if entrega.fin}}<button type="button" data-action="borrarLocal" class="mrc-enlace">Borrar la grabación de este navegador</button>{{/if}}
+    {{/unless}}
+  </section>
+  {{/if}}{{/if}}
+</div>

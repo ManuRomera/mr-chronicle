@@ -1,0 +1,13 @@
+# Cambios
+
+## 0.1.0
+
+Primera versión.
+
+- Grabación del micro de cada participante en su navegador (AudioWorklet + OPFS), en bruto y a 48 kHz, en trozos WAV de 60 s.
+- Grabación de la música, el ambiente y los efectos de Foundry en el cliente del máster, más un registro de lo que suena.
+- Sesión coordinada por el máster: preparar, consentimientos (grabar y publicar por separado), iniciar, pausar, finalizar.
+- Marcadores de momento y de «cortar esto», pausa del micro propio, indicador de grabación siempre visible.
+- La grabación se retoma tras recargar el navegador.
+- Entrega trozo a trozo al servidor de Foundry, reanudable, o descarga local.
+- Herramienta de postproducción: corrección de deriva, alineación a 0:00 (también tras un reinicio del servidor), limpieza con DeepFilterNet, transcripción con whisper.cpp, filtro de frases inventadas y de ecos, transcripción en MD/JSON/SRT, marcadores para Audacity e informe.

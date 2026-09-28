@@ -1,0 +1,16 @@
+<div class="mrc-mesa-parte">
+  {{#if s}}
+  <section class="mrc-bloque mrc-mesa">
+    <h3>En la mesa</h3>
+    <ul>
+      {{#each participantes}}
+      <li>
+        <span class="mrc-semaforo {{clase}}"></span>
+        <span class="mrc-nombre">{{nombre}}{{#if esGM}} <small>máster</small>{{/if}}</span>
+        <span class="mrc-texto">{{texto}}{{#if publica}} · <em>{{publica}}</em>{{/if}}</span>
+      </li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+</div>
