@@ -1,77 +1,138 @@
 /**
- * Escritor de trozos. Un Worker por pista.
+ * Escritor de trozos. Un Worker (de módulo) por pista.
  *
- * Recibe bloques int16 del worklet y los escribe en OPFS como WAV de 60 s:
- * `<prefijo>-000001.wav`, `<prefijo>-000002.wav`… La cabecera se escribe al abrir el trozo
- * y se corrige al cerrarlo; si el navegador muere a mitad, la postproducción no se fía de
- * la cabecera y usa el tamaño del archivo, así que no se pierde nada ya escrito.
+ * Recibe bloques int16 del worklet y los escribe en OPFS en trozos de 60 s:
+ * - formato "wav" (voz): `<prefijo>-000001.wav`… La cabecera se escribe al abrir el trozo y se
+ *   corrige al cerrarlo; si el navegador muere a mitad, la postproducción usa el tamaño real.
+ * - formato "opus" (música y efectos de Foundry): `<prefijo>-000001.ogg`… un único flujo Ogg Opus
+ *   a 160 kbps repartido en archivos consecutivos. Ocupa ~10 veces menos.
  */
-const SEGUNDOS_POR_TROZO = 60;
+import { FlujoOgg, PRE_SKIP } from "./ogg.js";
 
-let cfg = null;      // {ruta, prefijo, sampleRate, canales}
+const SEGUNDOS_POR_TROZO = 60;
+const BITRATE_OPUS = 160_000;
+
+let cfg = null;      // {ruta, prefijo, sampleRate, canales, formato}
 let dir = null;
-let trozo = null;    // {handle, bytes, n}
+let trozo = null;    // {handle, bytes}
 let n = 0;
 let framesPorTrozo = 0;
 
+// Opus
+let codificador = null;
+let ogg = null;
+let framesEntrada = 0;   // muestras entregadas al codificador
+let framesSalida = 0;    // muestras ya codificadas (para el gránulo y para rotar trozos)
+let inicioTrozo = 0;
+
 self.onmessage = async ({ data }) => {
-  if (data.iniciar) {
-    try {
-      cfg = data.iniciar;
-      framesPorTrozo = cfg.sampleRate * SEGUNDOS_POR_TROZO;
-      dir = await navigator.storage.getDirectory();
-      for (const parte of cfg.ruta) dir = await dir.getDirectoryHandle(parte, { create: true });
-      data.puerto.onmessage = ({ data }) => escribir(data);
-      self.postMessage({ listo: true });
-    } catch (error) {
-      self.postMessage({ error: `No se pudo preparar el almacenamiento: ${error.message}` });
+  if (!data.iniciar) return;
+  try {
+    cfg = data.iniciar;
+    framesPorTrozo = cfg.sampleRate * SEGUNDOS_POR_TROZO;
+    dir = await navigator.storage.getDirectory();
+    for (const parte of cfg.ruta) dir = await dir.getDirectoryHandle(parte, { create: true });
+    if (cfg.formato === "opus" && !(await prepararOpus())) {
+      cfg.formato = "wav";
+      self.postMessage({ aviso: "Este navegador no puede codificar Opus: esta pista se guarda en WAV y ocupará más." });
     }
+    data.puerto.onmessage = ({ data }) => escribir(data);
+    self.postMessage({ listo: true, formato: cfg.formato });
+  } catch (error) {
+    self.postMessage({ error: `No se pudo preparar el almacenamiento: ${error.message}` });
   }
 };
 
-async function abrir() {
+async function prepararOpus() {
+  const config = { codec: "opus", sampleRate: 48000, numberOfChannels: cfg.canales, bitrate: BITRATE_OPUS };
+  if (typeof AudioEncoder === "undefined" || cfg.sampleRate !== 48000) return false;
+  if (!(await AudioEncoder.isConfigSupported(config)).supported) return false;
+  ogg = new FlujoOgg(cfg.canales);
+  codificador = new AudioEncoder({
+    output: paquete => {
+      const bytes = new Uint8Array(paquete.byteLength);
+      paquete.copyTo(bytes);
+      framesSalida += Math.round((paquete.duration * 48000) / 1e6);
+      const hasta = framesSalida; // se fija ya: la escritura va en cola y framesSalida sigue avanzando
+      encolar(async () => {
+        if (!trozo) await abrir(hasta);
+        escribirBytes(ogg.pagina(bytes, PRE_SKIP + hasta));
+        if (hasta - inicioTrozo >= framesPorTrozo) cerrar();
+      });
+    },
+    error: e => self.postMessage({ error: `Error del codificador: ${e.message}` })
+  });
+  codificador.configure(config);
+  return true;
+}
+
+async function abrir(desde = 0) {
   n += 1;
-  const nombre = `${cfg.prefijo}-${String(n).padStart(6, "0")}.wav`;
+  const nombre = `${cfg.prefijo}-${String(n).padStart(6, "0")}.${cfg.formato === "opus" ? "ogg" : "wav"}`;
   const archivo = await dir.getFileHandle(nombre, { create: true });
   const handle = await archivo.createSyncAccessHandle();
   handle.truncate(0);
-  handle.write(cabecera(0), { at: 0 });
   trozo = { handle, bytes: 0 };
+  if (cfg.formato === "wav") trozo.handle.write(cabecera(0), { at: 0 });
+  else {
+    inicioTrozo = desde;
+    if (n === 1) for (const p of ogg.cabeceras()) escribirBytes(p);
+  }
+}
+
+function escribirBytes(bytes) {
+  const desplazamiento = cfg.formato === "wav" ? 44 : 0;
+  trozo.handle.write(bytes, { at: desplazamiento + trozo.bytes });
+  trozo.bytes += bytes.length;
 }
 
 function cerrar() {
   if (!trozo) return;
-  trozo.handle.write(cabecera(trozo.bytes), { at: 0 });
+  if (cfg.formato === "wav") trozo.handle.write(cabecera(trozo.bytes), { at: 0 });
   trozo.handle.flush();
   trozo.handle.close();
   trozo = null;
 }
 
-// Los mensajes llegan en orden, pero abrir() es asíncrono: se encadenan para no solaparse.
+// abrir() es asíncrono: todas las escrituras se encadenan para no solaparse.
 let cola = Promise.resolve();
+const encolar = tarea => (cola = cola.then(tarea).catch(error =>
+  // Lo más probable: disco lleno. Se avisa; lo ya escrito sigue a salvo.
+  self.postMessage({ error: `Error al escribir: ${error.message}` })));
+
 function escribir(msg) {
-  cola = cola.then(async () => {
-    try {
-      let datos = new Uint8Array(msg.datos.buffer, msg.datos.byteOffset, msg.datos.byteLength);
-      const bytesPorTrozo = framesPorTrozo * cfg.canales * 2;
-      while (datos.length) {
-        if (!trozo) await abrir();
-        const cabe = Math.min(datos.length, bytesPorTrozo - trozo.bytes);
-        trozo.handle.write(datos.subarray(0, cabe), { at: 44 + trozo.bytes });
-        trozo.bytes += cabe;
-        datos = datos.subarray(cabe);
-        if (trozo.bytes >= bytesPorTrozo) cerrar();
-      }
-      if (trozo) trozo.handle.flush();
-      if (msg.fin) {
-        cerrar();
-        self.postMessage({ cerrado: true, trozos: n });
-      }
-    } catch (error) {
-      // Lo más probable: disco lleno. Se avisa; lo ya escrito sigue a salvo.
-      self.postMessage({ error: `Error al escribir: ${error.message}` });
+  if (cfg.formato === "opus") return escribirOpus(msg);
+  encolar(async () => {
+    let datos = new Uint8Array(msg.datos.buffer, msg.datos.byteOffset, msg.datos.byteLength);
+    const bytesPorTrozo = framesPorTrozo * cfg.canales * 2;
+    while (datos.length) {
+      if (!trozo) await abrir();
+      const cabe = Math.min(datos.length, bytesPorTrozo - trozo.bytes);
+      escribirBytes(datos.subarray(0, cabe));
+      datos = datos.subarray(cabe);
+      if (trozo.bytes >= bytesPorTrozo) cerrar();
     }
+    if (trozo) trozo.handle.flush();
+    if (msg.fin) { cerrar(); self.postMessage({ cerrado: true, trozos: n }); }
   });
+}
+
+async function escribirOpus(msg) {
+  const frames = msg.datos.length / cfg.canales;
+  if (frames) {
+    const audio = new AudioData({
+      format: "s16", sampleRate: 48000, numberOfChannels: cfg.canales, numberOfFrames: frames,
+      timestamp: Math.round((framesEntrada * 1e6) / 48000), data: msg.datos
+    });
+    framesEntrada += frames;
+    codificador.encode(audio);
+    audio.close();
+  }
+  encolar(async () => { if (trozo) trozo.handle.flush(); });
+  if (msg.fin) {
+    await codificador.flush();
+    encolar(async () => { cerrar(); self.postMessage({ cerrado: true, trozos: n }); });
+  }
 }
 
 function cabecera(bytesDatos) {

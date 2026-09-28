@@ -5,7 +5,8 @@
 Primera versión.
 
 - Grabación del micro de cada participante en su navegador (AudioWorklet + OPFS), en bruto y a 48 kHz, en trozos WAV de 60 s.
-- Grabación de la música, el ambiente y los efectos de Foundry en el cliente del máster, más un registro de lo que suena.
+- Grabación de la música, el ambiente y los efectos de Foundry en el cliente del máster, comprimida en Ogg Opus a 160 kbps con WebCodecs (unas 10 veces menos que WAV; los silencios casi no ocupan), más un registro de lo que suena.
+- Aviso si el micro se desconecta o deja de llegar sonido durante 30 s.
 - Sesión coordinada por el máster: preparar, consentimientos (grabar y publicar por separado), iniciar, pausar, finalizar.
 - Marcadores de momento y de «cortar esto», pausa del micro propio, indicador de grabación siempre visible.
 - La grabación se retoma tras recargar el navegador.

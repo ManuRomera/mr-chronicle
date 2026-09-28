@@ -24,9 +24,10 @@ export class Pista {
    * @param {string} o.tipo               voz | musica | ambiente | efectos
    * @param {number} [o.latenciaEntradaMs] Solo micro: retraso entre captura y procesado.
    * @param {object} [o.info]              Datos para el manifiesto.
+   * @param {string} [o.formato]           wav (voz, sin pérdida) | opus (música y efectos, ~10 veces menos)
    */
-  constructor({ ctx, fuente, canales, tipo, latenciaEntradaMs = null, info = {} }) {
-    Object.assign(this, { ctx, fuente, canales, tipo, latenciaEntradaMs, info });
+  constructor({ ctx, fuente, canales, tipo, latenciaEntradaMs = null, info = {}, formato = "wav" }) {
+    Object.assign(this, { ctx, fuente, canales, tipo, latenciaEntradaMs, info, formato });
     this.nivel = 0;
     this.meta = null;
     this.grabando = false;
@@ -50,6 +51,7 @@ export class Pista {
     this.nodo.port.onmessage = ({ data }) => {
       this.nivel = data.nivel;
       if ("frame" in data) this.meta = data;
+      if (this.latenciaEntradaMs !== null && this.grabando) this.vigilarSenal();
     };
     if (this.ctx.state !== "running") await this.ctx.resume();
   }
@@ -57,17 +59,18 @@ export class Pista {
   /** Empieza a grabar en `ruta` (carpeta OPFS) con nombres `<prefijo>-000001.wav`. */
   async iniciar(ruta, prefijo) {
     Object.assign(this, { ruta, prefijo, errores: [] });
-    this.worker = new Worker(`${RUTA}/escritor-worker.js`);
+    this.worker = new Worker(`${RUTA}/escritor-worker.js`, { type: "module" });
     const canal = new MessageChannel();
     const listo = new Promise((resolve, reject) => {
       this.worker.onmessage = ({ data }) => {
-        if (data.listo) resolve();
+        if (data.listo) { this.info.formato = data.formato; resolve(); }
+        if (data.aviso) ui.notifications.warn(`MR · Chronicle: ${data.aviso}`);
         if (data.error) { this.errores.push(data.error); reject(new Error(data.error)); this.alCambiar(); }
         if (data.cerrado) this.cerrado?.(data);
       };
     });
     this.worker.postMessage({
-      iniciar: { ruta, prefijo, sampleRate: this.ctx.sampleRate, canales: this.canales },
+      iniciar: { ruta, prefijo, sampleRate: this.ctx.sampleRate, canales: this.canales, formato: this.formato },
       puerto: canal.port2
     }, [canal.port2]);
     await listo;
@@ -77,6 +80,20 @@ export class Pista {
     this.inicioPerf = performance.now();
     setTimeout(() => this.anclar(), 1500); // primera ancla en cuanto haya una muestra de referencia
     this.intervalo = setInterval(() => this.anclar(), INTERVALO_ANCLAS_MS);
+  }
+
+  /**
+   * Micro silenciado o desconectado: se sigue grabando (silencio), pero hay que avisar.
+   * Un micro real nunca da silencio absoluto (siempre hay ruido de la sala); -80 dB lo es.
+   */
+  vigilarSenal() {
+    const ahora = performance.now();
+    if (this.nivel > 1e-4) this.ultimaSenal = ahora;
+    const sinSenal = ahora - (this.ultimaSenal ?? this.inicioPerf) > 30_000;
+    if (sinSenal === Boolean(this.sinSenal)) return;
+    this.sinSenal = sinSenal;
+    if (sinSenal) ui.notifications.error("MR · Chronicle: no llega sonido de tu micro desde hace 30 s. ¿Está silenciado o desconectado?", { permanent: true });
+    this.alCambiar();
   }
 
   pausar(pausa) {
@@ -151,6 +168,11 @@ export async function pistaMicro(deviceId) {
     info: { dispositivo: pista.label, ajustes }
   });
   p.stream = stream;
+  pista.addEventListener("ended", () => {
+    p.errores?.push("Se ha desconectado el micro. Vuelve a conectarlo y recarga la página: la grabación seguirá en un tramo nuevo.");
+    ui.notifications.error("MR · Chronicle: se ha desconectado tu micro.", { permanent: true });
+    p.alCambiar();
+  });
   // Si el navegador ignoró la petición de audio en bruto, hay que avisar: afecta al podcast.
   p.procesado = ["echoCancellation", "noiseSuppression", "autoGainControl"].filter(k => ajustes[k] === true);
   const soltar = p.soltar.bind(p);

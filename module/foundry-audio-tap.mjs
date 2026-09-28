@@ -26,7 +26,7 @@ export async function pistasFoundry() {
     const puente = ctx.createMediaStreamDestination();
     ctx.gainNode.connect(puente);
     const p = new Pista({
-      ctx: propio, fuente: propio.createMediaStreamSource(puente.stream), canales: 2, tipo,
+      ctx: propio, fuente: propio.createMediaStreamSource(puente.stream), canales: 2, tipo, formato: "opus",
       info: { contexto: nombre, sampleRateFoundry: ctx.sampleRate }
     });
     const soltar = p.soltar.bind(p);

@@ -14,7 +14,8 @@ El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chroni
 **Requisitos:**
 - **Chrome, Edge o la app de escritorio de Foundry.** Firefox y Safari no están soportados.
 - **Cascos:** con altavoces, tu micro recogería a los demás.
-- Unos **1,5 GB libres** por cada 4 horas de partida.
+- Espacio libre para 4 horas de partida: **1,5 GB** los jugadores, **unos 2,5 GB** el máster (su voz más la música y los efectos de Foundry, estos comprimidos en Opus).
+- **No suspendas el ordenador** (ni cierres la tapa del portátil) durante la partida: la grabación se para hasta que vuelvas. **No uses el modo incógnito** ni borres los datos del navegador antes de entregar.
 
 **Pasos:**
 1. El máster abre el panel con el indicador **MR · Chronicle** (arriba, en el centro) y pulsa **Preparar sesión**.
@@ -26,7 +27,7 @@ El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chroni
    - **Pausar mi micro** graba silencio mientras dure.
 5. El máster pulsa **Finalizar**. Cada uno pulsa **Entregar**. Si se corta, se vuelve a pulsar: solo sube lo que falte.
 
-Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa.
+Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Si el micro se desconecta o deja de llegar sonido durante 30 s, avisa en pantalla (y el máster lo ve en la lista de la mesa).
 
 ### Configuración del máster (una sola vez)
 
@@ -76,7 +77,7 @@ No actives `vad`: el detector de voz de whisper.cpp junta toda la voz de una per
 |---|---|
 | `stems/voz-<nombre>.wav` | Voz limpia. Todas las pistas empiezan en 0:00 y duran lo mismo. |
 | `stems/voz-<nombre>.bruta.wav` | Voz original, alineada. |
-| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry. |
+| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry (grabado en Opus a 160 kbps; llegan unos 0,1 s tarde respecto a las voces, sin importancia para música de fondo). |
 | `transcript.md`, `.json`, `.srt` | Transcripción con hablante y hora. |
 | `marcadores.txt` | Marcadores, para importar en Audacity (Archivo → Importar → Etiquetas). |
 | `musica.json` | Qué sonó y cuándo. |

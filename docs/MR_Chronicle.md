@@ -313,7 +313,8 @@ for (const name of ["music", "environment", "interface"]) {
 }
 ```
 
-- Se graba con el mismo sistema que la voz (Worklet, Worker, OPFS y anclas). Estéreo, 48 kHz.
+- Se graba con el mismo sistema que la voz (Worklet, Worker, OPFS y anclas). Estéreo, 48 kHz, **comprimido en Ogg Opus a 160 kbps** con WebCodecs dentro del Worker: la música de Foundry ya viene comprimida de origen, así que guardarla sin pérdida no aporta nada. Unas 10 veces menos que WAV, y los silencios casi no ocupan: el máster pasa de ~9,7 GB a ~2,5 GB en 4 horas como mucho. Los trozos son pedazos consecutivos de un único flujo Ogg; la postproducción los pega y los decodifica. La voz sigue en WAV.
+- El paso por MediaStream retrasa estas pistas unos 100 ms respecto a las voces; se puede compensar con `ajustesMs`.
 - **Comprobado al implementar:** los contextos de Foundry usan búfer corto y, con la pestaña en segundo plano, se saltan trozos (hasta 100 ms en 3 minutos). Así que **no se graba dentro de ellos**: `gainNode → createMediaStreamDestination()` lleva su salida a un contexto propio con `latencyHint: "playback"`, que es el que cuenta las muestras.
 - `gainNode` no es API documentada. Se aísla en `foundry-audio-tap.mjs` y se revisa en cada versión mayor.
 - **Se graba lo que oye el máster:** los sonidos ambientales dependen de su posición en la escena y el volumen depende de sus deslizadores.

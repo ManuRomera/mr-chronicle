@@ -77,7 +77,7 @@ for (const userId of fs.readdirSync(SESION).sort()) {
   if (!manifiesto) aviso(`${userId}: falta manifiesto.json (entrega incompleta). Se usa lo que haya.`);
   const tramos = {};
   for (const a of archivos) {
-    const m = a.match(/^(voz|musica|ambiente|efectos)-(\d+)-(\d{6})\.wav$/);
+    const m = a.match(/^(voz|musica|ambiente|efectos)-(\d+)-(\d{6})\.(wav|ogg)$/);
     if (m) (tramos[`${m[1]}-${m[2]}`] ??= []).push(a);
   }
   const leer = n => fs.existsSync(path.join(dir, n)) ? leerNDJSON(fs.readFileSync(path.join(dir, n), "utf8")) : [];
@@ -116,10 +116,23 @@ for (const p of participantes) {
   const referencia = porNumero.length ? diferencia(p.leer(`${porNumero[0]}-anclas.txt`)) : null;
 
   for (const [prefijo, trozos] of Object.entries(p.tramos)) {
-    const cab = fs.readFileSync(path.join(p.dir, trozos[0])).subarray(0, 44);
-    const canales = cab.readUInt16LE(22), fsNominal = cab.readUInt32LE(24);
-    // No se usa el tamaño de la cabecera: si el navegador murió a mitad, estaría mal.
-    const frames = trozos.map(t => (fs.statSync(path.join(p.dir, t)).size - 44) / (2 * canales));
+    let canales, fsNominal, frames, raw = null;
+    if (trozos[0].endsWith(".ogg")) {
+      // Música y efectos: trozos consecutivos de un único flujo Ogg Opus. Se pegan y se decodifican.
+      canales = fs.readFileSync(path.join(p.dir, trozos[0]))[37]; // OpusHead: canales
+      fsNominal = 48000;
+      const ogg = path.join(TMP, `${p.userId}-${prefijo}.ogg`);
+      fs.writeFileSync(ogg, Buffer.concat(trozos.map(t => fs.readFileSync(path.join(p.dir, t)))));
+      raw = path.join(TMP, `${p.userId}-${prefijo}.raw`);
+      ejecutar("ffmpeg", ["-v", "error", "-y", "-i", ogg, "-f", "s16le", "-ar", "48000", "-ac", String(canales), raw]);
+      fs.rmSync(ogg);
+      frames = [fs.statSync(raw).size / (2 * canales)];
+    } else {
+      const cab = fs.readFileSync(path.join(p.dir, trozos[0])).subarray(0, 44);
+      canales = cab.readUInt16LE(22); fsNominal = cab.readUInt32LE(24);
+      // No se usa el tamaño de la cabecera: si el navegador murió a mitad, estaría mal.
+      frames = trozos.map(t => (fs.statSync(path.join(p.dir, t)).size - 44) / (2 * canales));
+    }
     let anclas = p.leer(`${prefijo}-anclas.txt`);
     const d = diferencia(anclas);
     if (referencia !== null && d !== null && Math.abs(d - referencia) > 2000) {
@@ -133,7 +146,7 @@ for (const p of participantes) {
     const ppm = (r.fsReal / fsNominal - 1) * 1e6;
     if (r.hueco) aviso(`${p.nombre} ${prefijo}: error residual de ${r.residuoMax.toFixed(0)} ms. Probablemente se perdieron muestras; revisa la alineación a oído.`);
     if (Math.abs(ppm) > 300) aviso(`${p.nombre} ${prefijo}: deriva de ${ppm.toFixed(0)} ppm, anormalmente alta.`);
-    tramos.push({ p, prefijo, tipo: prefijo.split("-")[0], trozos, canales, fsNominal, frames: frames.reduce((a, b) => a + b, 0), r, ppm });
+    tramos.push({ p, prefijo, tipo: prefijo.split("-")[0], trozos, canales, fsNominal, frames: frames.reduce((a, b) => a + b, 0), r, ppm, raw });
   }
 }
 if (!tramos.length) { console.error("Ningún tramo tiene anclas suficientes."); process.exit(1); }
@@ -146,10 +159,12 @@ console.log(`  Sesión: ${reloj(duracion * 1000)}`);
 
 paso("Alineando pistas");
 for (const t of tramos) {
-  const raw = path.join(TMP, `${t.p.userId}-${t.prefijo}.raw`);
-  const fd = fs.openSync(raw, "w");
-  for (const trozo of t.trozos) fs.writeSync(fd, fs.readFileSync(path.join(t.p.dir, trozo)).subarray(44));
-  fs.closeSync(fd);
+  const raw = t.raw ?? path.join(TMP, `${t.p.userId}-${t.prefijo}.raw`);
+  if (!t.raw) {
+    const fd = fs.openSync(raw, "w");
+    for (const trozo of t.trozos) fs.writeSync(fd, fs.readFileSync(path.join(t.p.dir, trozo)).subarray(44));
+    fs.closeSync(fd);
+  }
   const inicio = (t.r.a + ajuste(t.p) - t0) / 1000;
   t.alineado = path.join(TMP, `${t.p.userId}-${t.prefijo}.wav`);
   // Cada muestra recibe su instante real (frecuencia medida + inicio en la sesión) y

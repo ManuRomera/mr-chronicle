@@ -308,7 +308,8 @@ class Chronicle {
       minutos: voz?.minutos ?? 0,
       pistas: this.pistas.length,
       entregado: this.manifiesto?.entregado ?? null,
-      error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0] ?? null,
+      error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0]
+        ?? (voz?.sinSenal ? "No llega sonido del micro. ¿Está silenciado o desconectado?" : null),
       navegador: this.puedeGrabar
     };
   }

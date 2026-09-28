@@ -31,6 +31,8 @@ Módulo de Foundry VTT (`mr-chronicle`) + herramienta de postproducción en Node
 - El servidor solo acepta ciertas extensiones: por eso el audio va en `.wav`, y las anclas y marcadores en `.txt` (con contenido NDJSON). Los archivos que no son multimedia no se pueden sobrescribir.
 - `express-fileupload` guarda cada subida entera en RAM: nunca subir archivos grandes de una vez.
 - Foundry no tiene el helper de Handlebars `selected`.
+- Pistas de Foundry en Opus (`workers/ogg.js`): el gránulo de cada página hay que fijarlo al salir el paquete del codificador, no al escribirlo (la escritura va en cola). El retardo del codificador es `PRE_SKIP` = 312; comprobado con un clic que cae en su muestra exacta.
+- El paso por MediaStream retrasa las pistas de Foundry unos 100 ms respecto a las voces.
 - Whisper pone el inicio de una frase al principio de su ventana de 30 s si antes hubo silencio. El VAD de whisper.cpp no lo arregla: junta toda la voz en un segmento. Se recortan los tiempos con `silencedetect` sobre la pista limpia (`ajustarAVoz` en `lib.mjs`).
 
 ## Probar
