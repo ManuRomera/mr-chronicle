@@ -18,10 +18,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import {
-  leerNDJSON, regresion, segmentosWhisper, marcarEcos,
+  leerNDJSON, regresion, segmentosWhisper, marcarEcos, tramosDeVoz, ajustarAVoz, corregir,
   transcripcionMD, subtitulosSRT, etiquetasAudacity, reloj
 } from "./lib.mjs";
 
@@ -52,6 +52,11 @@ const paso = t => console.log(`\n▸ ${t}`);
 
 const hay = bin => { try { execFileSync("which", [bin], { stdio: "ignore" }); return true; } catch { return false; } };
 const ejecutar = (bin, args) => execFileSync(bin, args, { stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 26 });
+function detectarSilencios(archivo) {
+  // silencedetect informa por stderr.
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", archivo, "-af", `silencedetect=noise=${config.umbralSilencioDb ?? -40}dB:d=0.5`, "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  return r.stderr;
+}
 const slug = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 if (!hay("ffmpeg")) { console.error("Falta ffmpeg (brew install ffmpeg)."); process.exit(1); }
@@ -207,18 +212,22 @@ if (!op["sin-whisper"]) {
       const base = path.join(TMP, `${v.p.userId}-whisper`);
       const args = ["-m", MODELO, "-l", "es", "-ojf", "-of", base, "-f", wav16];
       if (prompt) args.push("--prompt", prompt);
+      // ponytail: el VAD de whisper.cpp junta toda la voz en segmentos enormes; se usa silencedetect.
       if (config.vad) args.push("--vad", "-vm", config.vad);
       const antes = Date.now();
       ejecutar("whisper-cli", args);
       const json = JSON.parse(fs.readFileSync(`${base}.json`, "utf8"));
-      segmentos.push(...segmentosWhisper(json, {
+      const propios = segmentosWhisper(json, {
         sessionId: sesion.id, participantId: v.p.userId, speaker: v.p.nombre, character: v.p.personaje,
         engine: `whisper.cpp/${path.basename(MODELO, ".bin").replace(/^ggml-/, "")}`
-      }));
+      });
+      ajustarAVoz(propios, tramosDeVoz(detectarSilencios(v.limpio ?? v.bruto), duracion * 1000));
+      for (const s of propios) s.text = corregir(s.text, config.correcciones);
+      segmentos.push(...propios);
       console.log(`  ${v.p.nombre}: ${((Date.now() - antes) / 1000).toFixed(0)} s`);
     }
     segmentos = marcarEcos(segmentos);
-    const alucinaciones = segmentos.filter(s => s.flags.includes("alucinacion")).length;
+    const alucinaciones = segmentos.filter(s => s.flags.includes("alucinacion") || s.flags.includes("sin-voz")).length;
     const ecos = segmentos.filter(s => s.flags.includes("posible-eco")).length;
     if (alucinaciones) console.log(`  ${alucinaciones} frases inventadas por Whisper descartadas.`);
     if (ecos) aviso(`${ecos} frases parecen eco de otro micro (¿alguien sin cascos?). Están en transcript.json marcadas y fuera del .md.`);

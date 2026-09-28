@@ -391,7 +391,9 @@ Todas las pistas empiezan en 0:00: se arrastran al editor de audio y ya están a
 - **Modelo:** `large-v3-turbo` (multilingüe; nunca los `.en`). Verificar el nombre exacto del archivo al implementar. Si en la Fase 0 resultara demasiado lento, bajar a `medium`.
 - **Idioma fijo:** `-l es`.
 - **Salida:** `-oj` (JSON con segmentos). Precisión esperada: ±200-500 ms por segmento. `--dtw` para tiempos por palabra si hacen falta.
-- **VAD:** activar el detector de voz de whisper.cpp. **Comprobar** que los tiempos devueltos siguen referidos al audio original.
+- **VAD:** **comprobado al implementar,** el detector de voz de whisper.cpp junta toda la voz de una persona en un único segmento: los extremos son correctos, pero se pierde el detalle intermedio. No se usa.
+- **Tiempos:** sin VAD, Whisper sitúa el inicio de una frase al principio de su ventana de 30 s si antes hubo silencio. Se corrige con `silencedetect` de ffmpeg sobre la pista ya limpia: cada segmento se recorta a la voz que tiene debajo y termina en el primer silencio de más de 2 s. En la prueba con voz sintética, los inicios quedaron a menos de 7 ms de los reales. Un segmento sin voz debajo es una invención y se descarta.
+- **Correcciones:** mapa `correcciones` en `campana.json` para los nombres que Whisper escribe mal pese al diccionario.
 - **Nombres propios:** `--prompt` con un diccionario por campaña (PNJ, lugares, términos inventados).
 - **Invenciones en los silencios:** Whisper genera frases que nadie dijo en tramos sin voz. Hay una lista negra filtrable (por ejemplo «Subtítulos realizados por la comunidad de Amara.org», «Gracias por ver el vídeo») más un umbral de confianza y de energía.
 - **Eco residual:** si un segmento de A casi coincide en texto con uno de B en ±2 s, se marca como posible eco y se conserva el de mayor energía.

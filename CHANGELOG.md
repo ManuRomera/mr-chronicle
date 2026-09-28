@@ -10,4 +10,5 @@ Primera versión.
 - Marcadores de momento y de «cortar esto», pausa del micro propio, indicador de grabación siempre visible.
 - La grabación se retoma tras recargar el navegador.
 - Entrega trozo a trozo al servidor de Foundry, reanudable, o descarga local.
+- Tiempos de la transcripción recortados a la voz real con `silencedetect` (a unos ms del inicio real). Los segmentos sin voz debajo se descartan como inventados. Correcciones de nombres propios en `campana.json`.
 - Herramienta de postproducción: corrección de deriva, alineación a 0:00 (también tras un reinicio del servidor), limpieza con DeepFilterNet, transcripción con whisper.cpp, filtro de frases inventadas y de ecos, transcripción en MD/JSON/SRT, marcadores para Audacity e informe.

@@ -59,8 +59,16 @@ Opciones:
 - `--sin-whisper`
 
 Copia [herramientas/post/campana.ejemplo.json](herramientas/post/campana.ejemplo.json) para configurar:
-- el diccionario de nombres propios, que ayuda a Whisper;
-- los ajustes de sincronía por participante.
+
+| Campo | Para qué |
+|---|---|
+| `diccionario` | Nombres propios de la campaña; ayudan a Whisper a escribirlos bien. |
+| `correcciones` | Los que aun así escribe mal: `{"Strath": "Strahd"}`. Solo cambia palabras completas. |
+| `ajustesMs` | Desfase fijo por participante, calibrado con las palmadas (ver abajo). |
+| `reduccionRuidoDb` | Cuánto ruido quita DeepFilterNet (30 dB deja la voz natural; 100 lo quita todo). |
+| `umbralSilencioDb` | Por debajo de este nivel se considera silencio al ajustar los tiempos de la transcripción. |
+
+No actives `vad`: el detector de voz de whisper.cpp junta toda la voz de una persona en segmentos enormes. La herramienta ya detecta la voz por su cuenta sobre la pista limpia.
 
 **Resultado en `salida/`:**
 

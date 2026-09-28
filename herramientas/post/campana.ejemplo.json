@@ -1,10 +1,11 @@
 {
-  "diccionario": ["Strahd", "Barovia", "Ireena", "Vallaki", "Madam Eva"],
+  "diccionario": ["Strahd von Zarovich", "Barovia", "Ireena", "Vallaki", "Madam Eva"],
+  "correcciones": { "Strath": "Strahd", "Strat": "Strahd", "Irena": "Ireena" },
   "ajustesMs": {
     "Ana": 0,
     "Gamemaster": 0
   },
   "modelo": "~/.cache/mr-chronicle/ggml-large-v3-turbo.bin",
-  "vad": null,
-  "reduccionRuidoDb": 30
+  "reduccionRuidoDb": 30,
+  "umbralSilencioDb": -40
 }

@@ -31,6 +31,7 @@ Módulo de Foundry VTT (`mr-chronicle`) + herramienta de postproducción en Node
 - El servidor solo acepta ciertas extensiones: por eso el audio va en `.wav`, y las anclas y marcadores en `.txt` (con contenido NDJSON). Los archivos que no son multimedia no se pueden sobrescribir.
 - `express-fileupload` guarda cada subida entera en RAM: nunca subir archivos grandes de una vez.
 - Foundry no tiene el helper de Handlebars `selected`.
+- Whisper pone el inicio de una frase al principio de su ventana de 30 s si antes hubo silencio. El VAD de whisper.cpp no lo arregla: junta toda la voz en un segmento. Se recortan los tiempos con `silencedetect` sobre la pista limpia (`ajustarAVoz` en `lib.mjs`).
 
 ## Probar
 

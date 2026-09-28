@@ -138,3 +138,44 @@ export function subtitulosSRT(segmentos) {
 export function etiquetasAudacity(marcadores) {
   return marcadores.map(m => `${(m.ms / 1000).toFixed(3)}\t${(m.ms / 1000).toFixed(3)}\t${m.etiqueta}`).join("\n") + "\n";
 }
+
+/** Tramos con voz a partir de la salida de `ffmpeg -af silencedetect` (stderr), en ms. */
+export function tramosDeVoz(salida, duracionMs) {
+  const tramos = [];
+  let desde = 0;
+  for (const linea of salida.split("\n")) {
+    const ini = linea.match(/silence_start: (-?[\d.]+)/);
+    const fin = linea.match(/silence_end: ([\d.]+)/);
+    if (ini) { const t = Math.max(0, Number(ini[1]) * 1000); if (t > desde) tramos.push([desde, t]); desde = null; }
+    if (fin) desde = Number(fin[1]) * 1000;
+  }
+  if (desde !== null && desde < duracionMs) tramos.push([desde, duracionMs]);
+  return tramos;
+}
+
+/**
+ * Whisper sitúa el inicio de una frase al principio de su ventana de 30 s si antes hubo
+ * silencio. Se recorta cada segmento a la voz que de verdad hay debajo; si no hay ninguna,
+ * se lo ha inventado.
+ */
+export function ajustarAVoz(segmentos, tramos) {
+  for (const s of segmentos) {
+    const debajo = tramos.filter(([a, b]) => a < s.endMs && b > s.startMs);
+    if (!debajo.length) { if (!s.flags.includes("alucinacion")) s.flags.push("sin-voz"); continue; }
+    // La frase termina en el primer silencio largo: lo que sigue es otra intervención.
+    let fin = debajo[0][1];
+    for (const [a, b] of debajo.slice(1)) { if (a - fin > 2000) break; fin = b; }
+    s.startMs = Math.round(Math.max(s.startMs, debajo[0][0]));
+    s.endMs = Math.round(Math.min(s.endMs, fin));
+  }
+  return segmentos;
+}
+
+/** Correcciones fijas de nombres propios que Whisper escribe mal: {"Strath": "Strahd"}. */
+export function corregir(texto, correcciones = {}) {
+  let t = texto;
+  for (const [mal, bien] of Object.entries(correcciones)) {
+    t = t.replace(new RegExp(`(?<![\\p{L}])${mal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "gu"), bien);
+  }
+  return t;
+}

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { regresion, esAlucinacion, marcarEcos, leerNDJSON } from "../lib.mjs";
+import { regresion, esAlucinacion, marcarEcos, leerNDJSON, tramosDeVoz, ajustarAVoz, corregir } from "../lib.mjs";
 
 test("la regresión recupera frecuencia real e inicio pese al ruido", () => {
   const fsReal = 48000 * (1 + 80e-6), inicio = 1_000_000;
@@ -35,6 +35,19 @@ test("marca como eco la frase repetida por otro micro", () => {
     s("b", 9000, "Espera, no entres todavía", 0.8)
   ]);
   assert.deepEqual(r.map(x => x.flags.length), [0, 1, 0]);
+});
+
+test("recorta los segmentos de Whisper a la voz real y descarta los que no tienen voz", () => {
+  const salida = "[silencedetect] silence_start: 0\n[silencedetect] silence_end: 12.0 | d\n[silencedetect] silence_start: 15.5\n[silencedetect] silence_end: 30 | d\n[silencedetect] silence_start: 33\n[silencedetect] silence_end: 52 | d\n";
+  const tramos = tramosDeVoz(salida, 60000);
+  assert.deepEqual(tramos, [[12000, 15500], [30000, 33000], [52000, 60000]]);
+  const s = (startMs, endMs) => ({ startMs, endMs, flags: [] });
+  const r = ajustarAVoz([s(0, 15000), s(30000, 52000), s(16000, 29000)], tramos);
+  assert.deepEqual(r.map(x => [x.startMs, x.endMs, x.flags.join()]), [[12000, 15000, ""], [30000, 33000, ""], [16000, 29000, "sin-voz"]]);
+});
+
+test("corrige nombres propios sin tocar otras palabras", () => {
+  assert.equal(corregir("Strat y Strath miran a Irena en Stratford", { Strath: "Strahd", Strat: "Strahd", Irena: "Ireena" }), "Strahd y Strahd miran a Ireena en Stratford");
 });
 
 test("NDJSON cortado a mitad no rompe la lectura", () => {
