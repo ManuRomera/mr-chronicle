@@ -60,9 +60,9 @@ Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible
 - **No suspendas el ordenador** (ni cierres la tapa del portátil) durante la partida: la grabación se para hasta que vuelvas. **No uses el modo incógnito** ni borres los datos del navegador antes de entregar.
 
 **Pasos:**
-1. El máster abre el panel con el indicador **MR · Chronicle** (arriba, en el centro) y pulsa **Preparar sesión**.
-2. A cada participante se le abre el panel: elige micro, comprueba que el medidor se mueve y **acepta** grabar (y, aparte, publicar). Al aceptar se hace una prueba de guardado; si el navegador no puede guardar, lo dice y no deja aceptar.
-3. El máster pulsa **Iniciar grabación**. No se puede iniciar si nadie ha aceptado, y si falta alguien avisa de a quién no se grabará. Si el propio máster no acepta, no se graba su voz ni la música de Foundry. El indicador se pone rojo en todos los que graban.
+1. El máster abre el panel con el indicador **MR · Chronicle** (arriba, en el centro), marca qué **pistas de Foundry** quiere grabar (música, ambiente, efectos; lo que no marque no se graba ni se procesa) y pulsa **Preparar sesión**.
+2. A cada participante se le abre el panel: elige micro, comprueba que pone «Micro encendido · captando sonido», marca si acepta grabar (y, aparte, publicar) y pulsa **Guardar**. Nadie más tiene que pulsar nada: es el máster quien inicia. Al guardar se hace una prueba de escritura; si el navegador no puede guardar, lo dice.
+3. El máster pulsa **Iniciar grabación**. En todas las pantallas sale una **cuenta atrás de 5 segundos** y todos empiezan a grabar a la vez. No se puede iniciar si nadie ha aceptado, y si falta alguien avisa de a quién no se grabará. Si el propio máster no acepta, no se graba su voz ni las pistas de Foundry.
 4. Durante la partida:
    - **★ Marcar momento** (o `Ctrl+Shift+M`) deja una marca para la edición.
    - **✂ Cortar esto** avisa de algo que no debe publicarse.
@@ -71,7 +71,7 @@ Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible
    - **Entregar:** la sube al servidor de Foundry. Si se corta, se vuelve a pulsar y solo sube lo que falte.
    - **Descargar:** la guarda en la carpeta que elija. Si todos eligen la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox (la que sincroniza su ordenador), las grabaciones se juntan solas en `<sesión>/<nombre>/`, y cualquiera del grupo puede procesarlas.
 
-Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Si el micro se desconecta, si deja de llegar sonido durante 30 s o si la grabación deja de guardarse en el disco, sale una alerta roja en pantalla, y el máster lo ve en la lista de la mesa.
+Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Junto a la grabación, el panel indica si el micro está encendido y si capta sonido. Si se desconecta, la grabación sigue (en silencio) y el micro se engancha solo al volver a conectarlo. Si la grabación deja de guardarse en el disco, sale una alerta roja, y el máster lo ve en la lista de la mesa.
 
 ### Configuración del máster (una sola vez)
 

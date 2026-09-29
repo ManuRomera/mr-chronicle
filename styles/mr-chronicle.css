@@ -111,3 +111,26 @@
 .mr-chronicle .mrc-aviso p { margin: 0 0 6px; }
 .mr-chronicle .mrc-aviso p:last-child { margin: 0; }
 .mr-chronicle .mrc-aviso a { color: inherit; text-decoration: underline; }
+
+/* Estado del micro, junto a la grabación. */
+.mr-chronicle .mrc-micro { margin: 0; font-size: 13px; font-weight: 600; }
+.mr-chronicle .mrc-micro::before { content: "●"; margin-right: 6px; }
+.mr-chronicle .mrc-micro[data-estado="capta"] { color: var(--mrc-verde); }
+.mr-chronicle .mrc-micro[data-estado="silencio"] { color: var(--mrc-ambar); }
+.mr-chronicle .mrc-micro[data-estado="apagado"] { color: var(--mrc-rojo); }
+
+.mr-chronicle .mrc-canales { border: 1px solid var(--mrc-linea); border-radius: 8px; padding: 8px 12px 10px; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.mr-chronicle .mrc-canales legend { color: var(--mrc-suave); font-size: 13px; padding: 0 4px; }
+
+#mr-chronicle-indicador[data-estado="cuenta"] { background: #c7302a; border-color: #ff5a52; color: #fff; }
+
+/* Cuenta atrás al iniciar: la ven todos a la vez. */
+#mr-chronicle-cuenta {
+  position: fixed; inset: 0; z-index: 10000; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: rgba(10, 11, 14, .55); color: #fff; text-shadow: 0 2px 12px rgba(0, 0, 0, .6);
+}
+#mr-chronicle-cuenta .mrc-cuenta-texto { font-size: 28px; font-weight: 600; }
+#mr-chronicle-cuenta .mrc-cuenta-numero { font-size: 160px; font-weight: 700; line-height: 1; color: #ff5a52; }
+#mr-chronicle-cuenta .mrc-cuenta-nota { font-size: 18px; opacity: .85; }
+#mr-chronicle-cuenta[data-fase="ya"] .mrc-cuenta-numero { font-size: 72px; }

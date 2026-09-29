@@ -1,5 +1,13 @@
 # Cambios
 
+## 0.1.5
+
+- **El máster elige qué pistas de Foundry se graban** (música, ambiente, efectos, cada una por separado). Lo que no marque no se graba, no se entrega y no se procesa. Se recuerda para la próxima sesión.
+- **Cuenta atrás de 5 segundos en todas las pantallas** al iniciar, sincronizada con el servidor: todos empiezan a la vez. Los jugadores solo marcan los consentimientos y pulsan **Guardar**.
+- **Sin alertas del micro.** Junto a la grabación, una línea dice si el micro está encendido y si capta sonido.
+- **El micro se reconecta solo:** si se desconecta, la grabación sigue en silencio y, al volver a conectarlo, se engancha al mismo archivo, sin recargar ni cortar.
+- Corregido: tras reiniciar el servidor podía aparecer una cuenta atrás absurda de una sesión antigua.
+
 ## 0.1.4
 
 - **Pistas procesadas en FLAC por defecto** (sin pérdida, unas 3 veces menos que WAV). Opción `--formato opus` (o `"formato": "opus"`) para lo mínimo, y `wav` si hace falta. Una sesión de 4 horas con 5 personas pasa de ~22 GB en `stems/` a ~3–4 GB (o ~1 GB en Opus).

@@ -25,7 +25,11 @@
       <label class="mrc-campo">Nombre de la sesión
         <input type="text" name="nombre" placeholder="Curse of Strahd 26">
       </label>
-      <label class="mrc-check"><input type="checkbox" name="grabarFoundry" {{checked grabarFoundry}}> Grabar también la música, el ambiente y los efectos de Foundry</label>
+      <fieldset class="mrc-canales">
+        <legend>Pistas de Foundry que se grabarán</legend>
+        {{#each canales}}<label class="mrc-check"><input type="checkbox" name="canal-{{id}}" {{checked marcado}}> {{nombre}}</label>{{/each}}
+        <p class="mrc-nota">Lo que no marques no se graba, no se entrega y no se procesa. Tu voz se graba aparte, si aceptas más abajo.</p>
+      </fieldset>
       <div class="mrc-botones"><button type="button" data-action="preparar" class="mrc-principal-btn">Preparar sesión</button></div>
       {{else}}
       <div class="mrc-botones">
@@ -35,7 +39,15 @@
         {{#if grabable}}{{#unless (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="finalizada">■ Finalizar</button>{{/unless}}{{/if}}
         {{#if (or finalizada (eq fase "preparada"))}}<button type="button" data-action="cerrarSesion">Cerrar sesión</button>{{/if}}
       </div>
+      {{#if (or (eq fase "grabando") (eq fase "pausada"))}}
+      <p class="mrc-nota">Pistas de Foundry: {{#if canalesElegidos}}{{canalesElegidos}}{{else}}ninguna{{/if}}.</p>
+      {{/if}}
       {{#if (eq fase "preparada")}}
+      <fieldset class="mrc-canales">
+        <legend>Pistas de Foundry que se grabarán</legend>
+        {{#each canales}}<label class="mrc-check"><input type="checkbox" name="canal-{{id}}" {{checked marcado}}> {{nombre}}</label>{{/each}}
+        <p class="mrc-nota">Lo que no marques no se graba, no se entrega y no se procesa. Tu voz se graba aparte, si aceptas más abajo.</p>
+      </fieldset>
       <p class="mrc-nota">{{#if consentimientos.nadie}}Nadie ha aceptado todavía: cada participante tiene que aceptar en su panel antes de iniciar.{{else}}Han aceptado {{consentimientos.aceptados}} de {{consentimientos.activos}}.{{#unless consentimientos.todos}} A quien no acepte no se le grabará.{{/unless}}{{/if}}</p>
       {{/if}}
       {{/unless}}
@@ -50,6 +62,7 @@
       <p class="mrc-grande">{{#if yo.pausa}}❚❚ En pausa{{else}}<span class="mrc-punto"></span> Grabando{{/if}} · <span data-mrc-reloj>{{reloj}}</span></p>
       <p class="mrc-nota" data-mrc-guardado>{{yo.guardadoMB}} MB guardados en este ordenador</p>
       <div class="mrc-nivel"><span></span></div>
+      <p class="mrc-micro" data-mrc-micro></p>
       <label class="mrc-campo">Marcador (opcional)
         <input type="text" name="marcador" placeholder="Momento para el tráiler">
       </label>
@@ -72,13 +85,14 @@
         </select>
       </label>
       <div class="mrc-nivel"><span></span></div>
+      <p class="mrc-micro" data-mrc-micro></p>
       <label class="mrc-check"><input type="checkbox" name="grabar" {{checked yo.acepta}}> Acepto que se grabe mi voz en esta sesión</label>
       <label class="mrc-check"><input type="checkbox" name="publicar" {{checked yo.publica}}> Acepto que se publique en el podcast</label>
       <div class="mrc-botones">
         <button type="button" data-action="probar">Probar micro</button>
-        <button type="button" data-action="aceptar" class="mrc-principal-btn">{{#if yo.acepta}}Guardar{{else}}Aceptar{{/if}}</button>
+        <button type="button" data-action="aceptar" class="mrc-principal-btn">Guardar</button>
       </div>
-      {{#if yo.acepta}}<p class="mrc-nota">Listo. Empezarás a grabar cuando el máster inicie la sesión.</p>{{/if}}
+      {{#if yo.acepta}}<p class="mrc-nota">Listo. No tienes que pulsar nada más: cuando el máster inicie, verás una cuenta atrás y empezarás a grabar a la vez que los demás.</p>{{else}}<p class="mrc-nota">Marca lo que aceptas y pulsa <strong>Guardar</strong>. Es el máster quien inicia la grabación.</p>{{/if}}
     {{/if}}
     {{#if pocoEspacio}}<p class="mrc-aviso ambar">Queda poco espacio para grabar ({{libreGB}} GB). Cuatro horas ocupan unos 1,4 GB.</p>{{/if}}
     {{#if yo.error}}<p class="mrc-aviso rojo">{{yo.error}}</p>{{/if}}

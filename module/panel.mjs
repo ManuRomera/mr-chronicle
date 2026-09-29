@@ -4,7 +4,13 @@
  * el resto (para no cerrar desplegables ni borrar lo que se está escribiendo).
  */
 import { ConMemoria } from "./memoria.mjs";
-import { chronicle, ID, reloj } from "./sesion.mjs";
+import { chronicle, ID, reloj, CANALES } from "./sesion.mjs";
+
+/** La última elección de pistas de Foundry del máster, para proponerla en la siguiente sesión. */
+const CLAVE_CANALES = `${ID}.canales`;
+function canalesRecordados() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_CANALES)) ?? {}; } catch { return {}; }
+}
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const RUTA = `modules/${ID}/templates`;
@@ -74,7 +80,10 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       esGM: game.user.isGM,
       s,
       faseTexto: FASES[s?.fase] ?? "",
-      grabarFoundry: s?.grabarFoundry ?? true,
+      canales: Object.entries(CANALES).map(([id, nombre]) => ({
+        id, nombre, marcado: s ? chronicle.canalesFoundry.includes(id) : Boolean(canalesRecordados()[id])
+      })),
+      canalesElegidos: chronicle.canalesFoundry.map(c => CANALES[c].toLowerCase()).join(", "),
       problema: chronicle.problemaNavegador?.texto ?? null,
       sinHttps: chronicle.problemaNavegador?.codigo === "https" ? chronicle.problemaNavegador : null,
       consentimientos: (() => {
@@ -108,6 +117,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       let clase = "gris", texto = "Sin respuesta";
       if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
       else if (e?.error) [clase, texto] = ["rojo", e.error];
+      else if (e?.grabando && !e.microEncendido) [clase, texto] = ["ambar", `Grabando · ${reloj(e.segundos ?? 0)} · micro apagado`];
       else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${reloj(e.segundos ?? 0)}`] : ["verde", `Grabando · ${reloj(e.segundos ?? 0)} · ${e.guardadoMB ?? 0} MB`];
       else if (e?.entregado) [clase, texto] = ["verde", "Entregado"];
       else if (e?.acepta && contexto.finalizada) [clase, texto] = ["ambar", "Falta entregar"];
@@ -133,7 +143,20 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     const barra = this.element.querySelector(".mrc-nivel > span");
     const tiempo = this.element.querySelector("[data-mrc-reloj]");
     const guardado = this.element.querySelector("[data-mrc-guardado]");
-    if (barra || tiempo) {
+    const micro = this.element.querySelector("[data-mrc-micro]");
+
+    // Pistas de Foundry: con la sesión preparada, cada casilla se guarda al momento.
+    if (chronicle.sesion?.fase === "preparada") {
+      for (const casilla of this.element.querySelectorAll("input[name^='canal-']")) {
+        casilla.addEventListener("change", () => {
+          const canales = Object.fromEntries(Object.keys(CANALES).map(c =>
+            [c, this.element.querySelector(`[name='canal-${c}']`)?.checked ?? false]));
+          try { localStorage.setItem(CLAVE_CANALES, JSON.stringify(canales)); } catch { /* sin almacenamiento */ }
+          chronicle.elegirCanales(canales);
+        });
+      }
+    }
+    if (barra || tiempo || micro) {
       this.medidor = setInterval(() => {
         const nivel = chronicle.micro?.nivel ?? 0;
         if (barra) {
@@ -144,6 +167,15 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
         const yo = chronicle.miEstado;
         if (tiempo) tiempo.textContent = reloj(yo.segundos);
         if (guardado) guardado.textContent = `${yo.guardadoMB} MB guardados en este ordenador`;
+        if (micro) {
+          const estado = !chronicle.micro ? "apagado" : !yo.microEncendido ? "apagado" : yo.captando ? "capta" : "silencio";
+          micro.dataset.estado = estado;
+          micro.textContent = {
+            capta: "Micro encendido · captando sonido",
+            silencio: "Micro encendido · no capta nada ahora mismo",
+            apagado: chronicle.micro ? "Micro apagado o desconectado: al volver a conectarlo, se engancha solo" : "Micro sin abrir: pulsa «Probar micro»"
+          }[estado];
+        }
       }, 60);
     }
   }
@@ -155,7 +187,9 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
 
   static async #preparar() {
     const f = new FormData(this.element);
-    await chronicle.preparar(f.get("nombre")?.trim(), f.get("grabarFoundry") === "on");
+    const canales = Object.fromEntries(Object.keys(CANALES).map(c => [c, f.get(`canal-${c}`) === "on"]));
+    try { localStorage.setItem(CLAVE_CANALES, JSON.stringify(canales)); } catch { /* sin almacenamiento */ }
+    await chronicle.preparar(f.get("nombre")?.trim(), canales);
   }
 
   static async #fase(evento, boton) {
@@ -171,7 +205,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
         const ok = await foundry.applications.api.DialogV2.confirm({
           window: { title: "Faltan consentimientos" },
           content: `<p>No han aceptado y <strong>no se les grabará</strong>: ${faltan.map(u => foundry.utils.escapeHTML(u.name)).join(", ")}.</p>`
-            + (yoFalto && chronicle.sesion.grabarFoundry ? "<p>Tú tampoco has aceptado: no se grabará tu voz <strong>ni la música y los efectos de Foundry</strong>.</p>" : "")
+            + (yoFalto && chronicle.canalesFoundry.length ? "<p>Tú tampoco has aceptado: no se grabará tu voz <strong>ni las pistas de Foundry</strong>.</p>" : "")
             + "<p>Si alguien acepta después, empezará a grabar en ese momento. ¿Iniciar igualmente?</p>"
         });
         if (!ok) return;

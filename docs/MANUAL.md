@@ -190,22 +190,33 @@ Arriba, en el centro de Foundry. Siempre visible; al hacer clic se abre el panel
 
 ### Paso a paso
 
-**1. El máster prepara la sesión.** Abre el panel, escribe un nombre (por ejemplo, *Curse of Strahd 26*), deja marcado **Grabar también la música, el ambiente y los efectos de Foundry** y pulsa **Preparar sesión**.
+**1. El máster prepara la sesión.** Abre el panel y escribe un nombre (por ejemplo, *Curse of Strahd 26*). En **Pistas de Foundry que se grabarán**, marca solo lo que quieras: **Música**, **Ambiente**, **Efectos**. Lo que no marques no se graba, no se entrega y no se procesa. Se recuerda tu elección para la próxima vez, y se puede cambiar hasta que inicies. Pulsa **Preparar sesión**.
 
 **2. Cada uno acepta, el máster también.** A todos se les abre el panel:
-1. Elige tu micro en **Micrófono** y habla: la barra verde debe moverse.
+1. Elige tu micro en **Micrófono** y habla: la barra verde debe moverse y debajo debe poner **«Micro encendido · captando sonido»**.
 2. Marca **Acepto que se grabe mi voz en esta sesión**.
 3. Si quieres, marca **Acepto que se publique en el podcast**. Son dos cosas distintas.
-4. Pulsa **Aceptar**. Se hace una prueba de guardado; si sale un aviso rojo, léelo (ver [sección 11](#11-si-algo-falla)).
+4. Pulsa **Guardar**. Se hace una prueba de escritura; si sale un aviso rojo, léelo (ver [sección 11](#11-si-algo-falla)).
 
-**3. Palmada de sincronía.** Todos a la vez, contando «3, 2, 1» en voz alta, dan una palmada cerca del micro. Repetidlo al final. Sirve para comprobar la alineación en el editor.
+**Los jugadores no tienen que pulsar nada más:** es el máster quien inicia la grabación, aunque luego cada uno grabe en su ordenador.
 
-**4. El máster inicia.** Pulsa **● Iniciar grabación**:
+**3. El máster inicia.** Pulsa **● Iniciar grabación**:
 - Está desactivado hasta que alguien acepte. La nota de debajo dice cuántos han aceptado.
 - Si falta alguien, te dice a quién **no** se grabará y pide confirmación. Si alguien acepta más tarde, empieza a grabar en ese momento.
-- **Si tú, como máster, no aceptas, no se graba tu voz ni la música de Foundry.**
+- **Si tú, como máster, no aceptas, no se graba tu voz ni las pistas de Foundry.**
+- En **todas las pantallas** aparece una **cuenta atrás de 5 segundos** («La grabación empieza en 5… 4…») y todos empiezan a grabar a la vez.
 
-**5. Jugad.** Botones del panel:
+**4. Palmada de sincronía.** Nada más empezar, todos a la vez, contando «3, 2, 1» en voz alta, dan una palmada cerca del micro. Repetidlo justo antes de finalizar. Sirve para comprobar la alineación en el editor.
+
+**5. Jugad.** Junto a la grabación, el panel indica el estado del micro:
+
+| Pone | Significa |
+|---|---|
+| ● Micro encendido · captando sonido (verde) | Todo bien. |
+| ● Micro encendido · no capta nada ahora mismo (ámbar) | Está en silencio o silenciado: si hablas y no cambia, revisa el micro. |
+| ● Micro apagado o desconectado (rojo) | Se sigue grabando en silencio. **Vuelve a conectarlo: se engancha solo**, sin recargar ni cortar la grabación. |
+
+Botones del panel:
 
 | Botón | Para qué |
 |---|---|
@@ -370,8 +381,8 @@ node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> --salida <otra-ca
 | **Estás en la app de escritorio de Foundry…** | Abre la partida en Chrome o Edge, con la misma dirección. |
 | **Este navegador no puede grabar…** | Usa Chrome o Edge actualizados. |
 | **Este navegador no consigue guardar la grabación…** | Al aceptar ha fallado la prueba de guardado. Actualiza Chrome, comprueba el espacio libre y que no estés en incógnito. |
-| **No llega sonido de tu micro desde hace 30 s** | Micro silenciado, desconectado o mal elegido. Revísalo; se sigue grabando. |
-| **Se ha desconectado tu micro** | Vuelve a conectarlo y **recarga la página**: la grabación sigue en un tramo nuevo. |
+| **Micro apagado o desconectado** (bajo la grabación) | Vuelve a conectarlo: se engancha solo y la grabación sigue. |
+| **Micro encendido · no capta nada ahora mismo** | Si hablas y no cambia: micro silenciado o mal elegido. |
 | **La pista de … no se está guardando en el disco** | Probablemente, disco lleno. Libera espacio y avisa al máster. |
 | **El navegador está procesando tu micro…** | Tu sistema aplica filtros al micro (en Mac, desactiva «Aislamiento de voz» en el Centro de control). |
 | **Tu rol no puede subir archivos** | El máster tiene que activar el permiso (ver [sección 4](#4-configuración-del-máster-una-sola-vez)), o usa **Descargar**. |

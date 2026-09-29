@@ -51,7 +51,8 @@ export class Pista {
     this.nodo.port.onmessage = ({ data }) => {
       if ("nivel" in data) this.nivel = data.nivel;
       if ("frame" in data) this.meta = data;
-      if (this.latenciaEntradaMs !== null && this.grabando) this.vigilarSenal();
+      // Por encima de ~-50 dB hay algo más que el ruido de fondo de un micro encendido.
+      if (this.latenciaEntradaMs !== null && this.nivel > 0.003) this.ultimaSenal = performance.now();
     };
     if (this.ctx.state !== "running") await this.ctx.resume();
   }
@@ -83,18 +84,11 @@ export class Pista {
     this.intervalo = setInterval(() => this.anclar(), INTERVALO_ANCLAS_MS);
   }
 
-  /**
-   * Micro silenciado o desconectado: se sigue grabando (silencio), pero hay que avisar.
-   * Un micro real nunca da silencio absoluto (siempre hay ruido de la sala); -80 dB lo es.
-   */
-  vigilarSenal() {
-    const ahora = performance.now();
-    if (this.nivel > 1e-4) this.ultimaSenal = ahora;
-    const sinSenal = ahora - (this.ultimaSenal ?? this.inicioPerf) > 30_000;
-    if (sinSenal === Boolean(this.sinSenal)) return;
-    this.sinSenal = sinSenal;
-    if (sinSenal) ui.notifications.error("MR · Chronicle: no llega sonido de tu micro desde hace 30 s. ¿Está silenciado o desconectado?", { permanent: true });
-    this.alCambiar();
+  /** Para el panel: ¿el micro está encendido y está captando sonido ahora mismo? */
+  get estadoMicro() {
+    const pista = this.stream?.getAudioTracks()[0];
+    const encendido = Boolean(pista && pista.readyState === "live" && pista.enabled && !pista.muted);
+    return { encendido, captando: encendido && performance.now() - (this.ultimaSenal ?? -1e9) < 1500 };
   }
 
   pausar(pausa) {
@@ -166,14 +160,16 @@ export class Pista {
 }
 
 /** Pista del micro del participante, en bruto. */
+const abrirMicro = deviceId => navigator.mediaDevices.getUserMedia({
+  audio: {
+    deviceId: deviceId ? { exact: deviceId } : undefined,
+    channelCount: 1, sampleRate: 48000,
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false
+  }
+});
+
 export async function pistaMicro(deviceId) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      deviceId: deviceId ? { exact: deviceId } : undefined,
-      channelCount: 1, sampleRate: 48000,
-      echoCancellation: false, noiseSuppression: false, autoGainControl: false
-    }
-  });
+  const stream = await abrirMicro(deviceId);
   const pista = stream.getAudioTracks()[0];
   const ajustes = pista.getSettings();
   const ctx = new AudioContext({ sampleRate: 48000, latencyHint: "playback" });
@@ -183,15 +179,33 @@ export async function pistaMicro(deviceId) {
     info: { dispositivo: pista.label, ajustes }
   });
   p.stream = stream;
-  pista.addEventListener("ended", () => {
-    p.errores?.push("Se ha desconectado el micro. Vuelve a conectarlo y recarga la página: la grabación seguirá en un tramo nuevo.");
-    ui.notifications.error("MR · Chronicle: se ha desconectado tu micro.", { permanent: true });
-    p.alCambiar();
-  });
+
+  // Si el micro se desconecta, la grabación sigue (en silencio) y, en cuanto vuelve a haber un
+  // micro, se engancha de nuevo al mismo procesador: mismo archivo, misma cuenta de muestras.
+  const reconectar = async () => {
+    if (p.stream.getAudioTracks()[0]?.readyState !== "ended" || p.reconectando) return;
+    p.reconectando = true;
+    try {
+      const nuevo = await abrirMicro(deviceId).catch(() => abrirMicro());
+      const fuente = ctx.createMediaStreamSource(nuevo);
+      try { p.fuente.disconnect(); } catch { /* ya desconectada */ }
+      fuente.connect(p.nodo);
+      Object.assign(p, { fuente, stream: nuevo });
+      p.alCambiar();
+    } catch { /* aún no hay micro: se reintenta en el próximo cambio de dispositivos */ }
+    p.reconectando = false;
+  };
+  navigator.mediaDevices.addEventListener("devicechange", reconectar);
+
   // Si el navegador ignoró la petición de audio en bruto, hay que avisar: afecta al podcast.
   p.procesado = ["echoCancellation", "noiseSuppression", "autoGainControl"].filter(k => ajustes[k] === true);
   const soltar = p.soltar.bind(p);
-  p.soltar = () => { soltar(); stream.getTracks().forEach(t => t.stop()); ctx.close(); };
+  p.soltar = () => {
+    navigator.mediaDevices.removeEventListener("devicechange", reconectar);
+    soltar();
+    p.stream.getTracks().forEach(t => t.stop());
+    ctx.close();
+  };
   await p.preparar();
   return p;
 }

@@ -13,11 +13,12 @@ import { Pista } from "./grabadora.mjs";
 
 export const CONTEXTOS = { musica: "music", ambiente: "environment", efectos: "interface" };
 
-export async function pistasFoundry() {
+/** @param {string[]} tipos  las pistas que ha elegido el máster: musica, ambiente, efectos */
+export async function pistasFoundry(tipos) {
   await game.audio.unlock; // los contextos se crean con el primer gesto del usuario
   const propio = new AudioContext({ sampleRate: 48000, latencyHint: "playback" });
   const pistas = [];
-  for (const [tipo, nombre] of Object.entries(CONTEXTOS)) {
+  for (const [tipo, nombre] of Object.entries(CONTEXTOS).filter(([t]) => tipos.includes(t))) {
     const ctx = game.audio[nombre];
     if (!ctx?.gainNode) {
       console.warn(`mr-chronicle | Foundry no expone game.audio.${nombre}.gainNode; no se grabará ${tipo}.`);

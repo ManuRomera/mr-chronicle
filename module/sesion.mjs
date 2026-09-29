@@ -5,7 +5,9 @@
  * clientes y lo conserva si alguien recarga. El socket del módulo solo lleva el estado de cada
  * participante (para el panel) y la petición de crear carpetas en el servidor.
  *
- * sesion = {id, nombre, fase: preparada|grabando|pausada|finalizada, inicioServerMs, finServerMs, grabarFoundry}
+ * sesion = {id, nombre, fase: preparada|grabando|pausada|finalizada, canales: {musica, ambiente, efectos},
+ *           inicioServerMs, finServerMs}
+ * Al iniciar, inicioServerMs queda 5 s en el futuro: todos ven la misma cuenta atrás y empiezan a la vez.
  */
 import { pistaMicro, probarAlmacenamiento } from "./grabadora.mjs";
 import { pistasFoundry, registrarMusica } from "./foundry-audio-tap.mjs";
@@ -16,6 +18,8 @@ import { subir, descargar, crearCarpetas } from "./entrega.mjs";
 export const ID = "mr-chronicle";
 const SOCKET = `module.${ID}`;
 const ESTADO_CADA_MS = 3000;
+const CUENTA_ATRAS_MS = 5000;
+export const CANALES = { musica: "Música", ambiente: "Ambiente", efectos: "Efectos" };
 
 /** 3725 → «1:02:05». */
 export const reloj = segundos => {
@@ -82,7 +86,7 @@ class Chronicle {
     game.socket.on(SOCKET, msg => this.alRecibir(msg));
     this.indicador();
     setInterval(() => this.emitirEstado(), ESTADO_CADA_MS);
-    setInterval(() => { if (this.grabando) this.indicador(); }, 1000); // el reloj avanza a la vista
+    setInterval(() => { if (this.grabando || this.faltaParaEmpezar) this.indicador(); }, 250); // el reloj avanza a la vista
     await sincronizar();
     this.emitir({ tipo: "hola" });
     await this.alCambiarSesion(true);
@@ -90,18 +94,31 @@ class Chronicle {
 
   // ─── Máster ─────────────────────────────────────────────────────────────
 
-  async preparar(nombre, grabarFoundry) {
+  /** Pistas de Foundry que ha elegido el máster (las sesiones antiguas usaban grabarFoundry). */
+  get canalesFoundry() {
+    const s = this.sesion;
+    const canales = s?.canales ?? (s?.grabarFoundry ? { musica: true, ambiente: true, efectos: true } : {});
+    return Object.keys(CANALES).filter(c => canales[c]);
+  }
+
+  async preparar(nombre, canales) {
     const fecha = new Date();
     const pad = n => String(n).padStart(2, "0");
     const slug = (nombre || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const id = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}-${pad(fecha.getHours())}${pad(fecha.getMinutes())}${slug ? `-${slug}` : ""}`;
-    await game.settings.set(ID, "sesion", { id, nombre: nombre || id, fase: "preparada", grabarFoundry, inicioServerMs: null, finServerMs: null });
+    await game.settings.set(ID, "sesion", { id, nombre: nombre || id, fase: "preparada", canales, inicioServerMs: null, finServerMs: null });
+  }
+
+  async elegirCanales(canales) {
+    await game.settings.set(ID, "sesion", { ...this.sesion, canales });
   }
 
   async fase(fase) {
     const s = { ...this.sesion, fase };
-    if (fase === "grabando" && !s.inicioServerMs) Object.assign(s, { inicioServerMs: ahora(), inicioEpochMs: Date.now() });
+    if (fase === "grabando" && !s.inicioServerMs) {
+      Object.assign(s, { inicioServerMs: ahora() + CUENTA_ATRAS_MS, inicioEpochMs: Date.now() + CUENTA_ATRAS_MS });
+    }
     if (fase === "finalizada") Object.assign(s, { finServerMs: ahora(), finEpochMs: Date.now() });
     await game.settings.set(ID, "sesion", s);
   }
@@ -115,7 +132,9 @@ class Chronicle {
   /** Reacciona a la fase que marca el máster. `alCargar`: tras entrar o recargar la página. */
   async alCambiarSesion(alCargar = false) {
     const s = this.sesion;
+    clearTimeout(this.temporizadorInicio);
     if (!s) {
+      this.quitarCuenta();
       await this.detenerTodo();
       this.manifiesto = null;
       return this.refrescar();
@@ -126,6 +145,15 @@ class Chronicle {
       this.entrega = null;
     }
     const acepto = this.manifiesto?.consentimiento.grabar;
+
+    // Cuenta atrás: todos la ven, y cada uno empieza a grabar cuando llega a cero.
+    const falta = this.faltaParaEmpezar;
+    if (falta > 0) {
+      this.cuentaAtras(s.inicioServerMs, acepto);
+      this.temporizadorInicio = setTimeout(() => this.alCambiarSesion(), falta);
+      return this.refrescar();
+    }
+    this.quitarCuenta();
 
     if (s.fase === "preparada" && !acepto) this.abrirPanel();
     if (["grabando", "pausada"].includes(s.fase) && acepto && !this.grabando && !this.problemaNavegador) {
@@ -224,11 +252,14 @@ class Chronicle {
 
       // Las pistas de Foundry, cuando su audio esté disponible: Foundry lo desbloquea con el
       // primer clic en la página, y la voz no puede quedarse esperando a eso.
-      if (game.user.isGM && this.sesion.grabarFoundry) {
-        this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), ...e }).catch(() => {}));
+      const canales = game.user.isGM ? this.canalesFoundry : [];
+      if (canales.length) {
+        if (canales.includes("musica")) {
+          this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), ...e }).catch(() => {}));
+        }
         const foundry = async () => {
           if (!this.grabando) return; // se paró mientras tanto
-          try { for (const p of await pistasFoundry()) await iniciar(p); }
+          try { for (const p of await pistasFoundry(canales)) await iniciar(p); }
           catch (error) { this.error = `No se pudo grabar la música de Foundry: ${error.message}`; }
           this.refrescar();
         };
@@ -372,8 +403,9 @@ class Chronicle {
       guardadoMB: Math.round(this.pistas.reduce((t, p) => t + (p.bytes ?? 0), 0) / 1e6),
       pistas: this.pistas.length,
       entregado: this.manifiesto?.entregado ?? null,
-      error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0]
-        ?? (voz?.sinSenal ? "No llega sonido del micro. ¿Está silenciado o desconectado?" : null),
+      error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0] ?? null,
+      microEncendido: this.micro?.estadoMicro.encendido ?? false,
+      captando: this.micro?.estadoMicro.captando ?? false,
       problema: this.problemaNavegador?.codigo ?? null
     };
   }
@@ -400,6 +432,45 @@ class Chronicle {
     if (this.panel?.rendered) this.panel.render();
   }
 
+  /**
+   * Milisegundos que faltan para que empiece la grabación (0 si no hay cuenta atrás).
+   * Más de la cuenta atrás no puede faltar: si pasa, es que el servidor se reinició (su hora
+   * vuelve a cero) y la sesión ya había empezado.
+   */
+  get faltaParaEmpezar() {
+    const s = this.sesion;
+    if (s?.fase !== "grabando" || !s.inicioServerMs) return 0;
+    const falta = s.inicioServerMs - ahora();
+    return falta > 0 && falta <= CUENTA_ATRAS_MS + 1000 ? falta : 0;
+  }
+
+  quitarCuenta() {
+    clearInterval(this.intervaloCuenta);
+    document.getElementById("mr-chronicle-cuenta")?.remove();
+  }
+
+  /** Cuenta atrás a pantalla completa, sincronizada con la hora del servidor. */
+  cuentaAtras(empiezaServerMs, acepto) {
+    let el = document.getElementById("mr-chronicle-cuenta");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "mr-chronicle-cuenta";
+      document.body.append(el);
+    }
+    clearInterval(this.intervaloCuenta);
+    const pintar = () => {
+      const falta = empiezaServerMs - ahora();
+      if (falta <= -1200) { clearInterval(this.intervaloCuenta); return el.remove(); }
+      el.dataset.fase = falta > 0 ? "cuenta" : "ya";
+      el.innerHTML = falta > 0
+        ? `<span class="mrc-cuenta-texto">La grabación empieza en</span><span class="mrc-cuenta-numero">${Math.ceil(falta / 1000)}</span>`
+          + `<span class="mrc-cuenta-nota">${acepto ? "Todos a la vez: no hace falta que pulses nada." : "A ti no se te va a grabar: no has aceptado."}</span>`
+        : `<span class="mrc-cuenta-numero">● Grabando</span>`;
+    };
+    pintar();
+    this.intervaloCuenta = setInterval(pintar, 100);
+  }
+
   indicador() {
     let el = document.getElementById("mr-chronicle-indicador");
     const s = this.sesion;
@@ -416,6 +487,8 @@ class Chronicle {
     let estado = this.grabando ? (pausa ? "pausa" : "grabando") : s?.fase ?? "inactivo";
     // La sesión graba pero este equipo no (aún no aceptó, o espera un clic tras recargar).
     if (!this.grabando && ["grabando", "pausada"].includes(estado)) estado = acepto ? "espera" : "ajena";
+    const falta = this.faltaParaEmpezar;
+    if (!this.grabando && falta > 0) estado = "cuenta";
     el.dataset.estado = estado;
     const tiempo = reloj(this.miEstado.segundos);
     el.textContent = {
@@ -424,6 +497,7 @@ class Chronicle {
       preparada: "MR · Chronicle · preparada",
       finalizada: "MR · Chronicle · entregar",
       espera: "MR · Chronicle · haz clic en la mesa para seguir grabando",
+      cuenta: `MR · Chronicle · la grabación empieza en ${Math.ceil(falta / 1000)}`,
       ajena: "MR · Chronicle · sesión en marcha (no te grabas)",
       inactivo: "MR · Chronicle"
     }[estado] ?? "MR · Chronicle";

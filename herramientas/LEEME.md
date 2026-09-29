@@ -26,7 +26,7 @@ Para poder grabar, los jugadores necesitan entrar por `https://`. En `servidor/`
 
 ## 2. Juntar las grabaciones
 
-Al acabar la partida, cada jugador pulsa en el panel de MR · Chronicle:
+Al acabar la partida, cada jugador pulsa en el panel de MR · Chronicle (solo se procesan las pistas que el máster eligió grabar):
 
 - **Descargar**, y elige la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox, la que su programa de sincronización tiene en el ordenador. Se crea `<sesión>/<nombre>/` y todo se junta solo.
   - Si no tiene el programa de sincronización, puede descargar en cualquier carpeta y luego arrastrar esa carpeta a la web de Drive o MEGA, dentro de la carpeta de la sesión.
