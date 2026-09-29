@@ -1,0 +1,17 @@
+name: Comprobar
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      # ffmpeg de Ubuntu (más antiguo que el de Homebrew): así se prueban dos versiones distintas.
+      - run: sudo apt-get install -y ffmpeg && ffmpeg -version | head -1
+      - run: npm test
+      - run: for f in mr-chronicle.mjs module/*.mjs workers/*.js herramientas/post/*.mjs; do node --check "$f"; done
+      - run: bash -n herramientas/instalar/instalar-linux.sh && bash -n herramientas/instalar/instalar-mac.command && bash -n herramientas/instalar/procesar.command

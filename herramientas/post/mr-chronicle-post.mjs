@@ -203,11 +203,21 @@ for (const t of tramos) {
   }
   const inicio = (t.r.a + ajuste(t.p) - t0) / 1000;
   t.alineado = path.join(TMP, `${t.p.userId}-${t.prefijo}.wav`);
-  // Cada muestra recibe su instante real (frecuencia medida + inicio en la sesión) y
-  // aresample la lleva a una rejilla exacta de 48 kHz, rellenando o recortando el principio.
+  // Todo por número de muestras, nunca por marcas de tiempo: cada versión de ffmpeg las
+  // trata distinto (la 6.1 aplicaba el desplazamiento dos veces y no recortaba el final).
+  // 1) Deriva: se etiqueta con la frecuencia real medida y se remuestrea a 48 kHz exactos.
+  //    aresample solo admite frecuencias enteras: se trabaja a escala ×100 (0,01 Hz de precisión).
+  // 2) Inicio: silencio delante (adelay) o recorte (atrim) de tantas muestras como toque.
+  // 3) Final: relleno y recorte a la duración de la sesión.
+  const desplazamiento = Math.round(inicio * 48000);
+  const totalMuestras = Math.round(duracion * 48000);
+  const filtros = [
+    `asetrate=${Math.round(t.r.fsReal * 100)}`, "aresample=4800000", "asetrate=48000",
+    desplazamiento > 0 ? `adelay=delays=${desplazamiento}S:all=1` : desplazamiento < 0 ? `atrim=start_sample=${-desplazamiento}` : null,
+    `apad=whole_len=${totalMuestras}`, `atrim=end_sample=${totalMuestras}`
+  ].filter(Boolean);
   ejecutar("ffmpeg", ["-v", "error", "-y", "-f", "s16le", "-ar", String(t.fsNominal), "-ac", String(t.canales), "-i", raw,
-    "-af", `asetpts=N/${t.r.fsReal}/TB+${inicio}/TB,aresample=48000:async=1000:first_pts=0,apad=whole_dur=${duracion},atrim=0:${duracion}`,
-    "-c:a", "pcm_s16le", t.alineado]);
+    "-af", filtros.join(","), "-c:a", "pcm_s16le", t.alineado]);
   fs.rmSync(raw);
   console.log(`  ${t.p.nombre} ${t.prefijo}: empieza en ${inicio.toFixed(3)} s · deriva ${t.ppm.toFixed(1)} ppm · residuo ${t.r.residuoMax.toFixed(1)} ms`);
 }
