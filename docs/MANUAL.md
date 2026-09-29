@@ -273,6 +273,7 @@ Copia `post/campana.ejemplo.json` como **`campana.json`** en la carpeta de la se
   "diccionario": ["Strahd von Zarovich", "Barovia", "Ireena", "Vallaki"],
   "correcciones": { "Strath": "Strahd", "Irena": "Ireena" },
   "ajustesMs": { "Ana": 0, "Gamemaster": 0 },
+  "formato": "flac",
   "reduccionRuidoDb": 30,
   "umbralSilencioDb": -40
 }
@@ -283,6 +284,7 @@ Copia `post/campana.ejemplo.json` como **`campana.json`** en la carpeta de la se
 | `diccionario` | Nombres propios de la campaña: Whisper los escribirá mejor. |
 | `correcciones` | Los que aun así escribe mal. Solo cambia palabras completas. |
 | `ajustesMs` | Desfase fijo de alguien, en milisegundos (ver [sección 10](#10-editar-el-podcast-y-la-crónica)). |
+| `formato` | Formato de las pistas: `flac` (por defecto), `opus` o `wav`. |
 | `reduccionRuidoDb` | Cuánto ruido quita: 30 deja la voz natural; 100 lo quita todo. |
 | `umbralSilencioDb` | Nivel por debajo del cual se considera silencio al ajustar los tiempos del texto. |
 
@@ -308,6 +310,8 @@ node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> --salida <otra-ca
 | `--config <json>` | Usa otro archivo de configuración. |
 | `--sin-ruido` | No limpia el ruido. |
 | `--sin-whisper` | No transcribe. |
+| `--formato flac\|opus\|wav` | Formato de las pistas (por defecto, `flac`). |
+| `--con-bruta` | Guarda también la voz sin limpiar, alineada. |
 | `--comprobar` | Solo dice qué falta por instalar. |
 
 ### 9.4. Qué hace, por orden
@@ -324,9 +328,13 @@ node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> --salida <otra-ca
 | Archivo | Qué es |
 |---|---|
 | **`informe.md`** | **Léelo primero:** quién **no** quiere que se publique su voz, qué hay que cortar, qué música revisar por licencias y si alguna pista tiene problemas. |
-| `stems/voz-<nombre>.wav` | Voz limpia de cada uno. |
-| `stems/voz-<nombre>.bruta.wav` | Voz original, alineada. |
-| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry. Llega unos 0,1 s tarde respecto a las voces. |
+| `stems/voz-<nombre>.flac` | Voz limpia de cada uno. |
+| `stems/foundry-musica.flac`, `foundry-ambiente.flac`, `foundry-efectos.flac` | Lo que sonó en Foundry. Llega unos 0,1 s tarde respecto a las voces. |
+| `stems/voz-<nombre>.bruta.flac` | Solo con `--con-bruta`: la voz sin limpiar, alineada. El original sin alinear siempre queda en la carpeta de cada participante. |
+
+**Formato de las pistas:** por defecto **FLAC**, que es sin pérdida (idéntico a WAV) y unas 3 veces más pequeño. Para cambiarlo, usa `--formato` o `"formato"` en `campana.json`:
+- `opus`: lo más pequeño, con una pérdida que en un podcast no se nota.
+- `wav`: sin comprimir, para un editor que no abra FLAC.
 | `transcript.md` | Transcripción legible, con hora, jugador y personaje. |
 | `transcript.srt` | Subtítulos. |
 | `transcript.json` | Transcripción completa con datos, incluidas las frases descartadas. |
@@ -397,7 +405,8 @@ Las incidencias se abren en https://github.com/ManuRomera/mr-chronicle/issues.
 |---|---|
 | Voz de un jugador (sin comprimir) | ~1,4 GB |
 | Máster: su voz más la música y los efectos de Foundry (Opus) | ~1,7–2,5 GB |
-| Sesión completa con 4 jugadores y máster | ~8 GB |
+| Sesión completa con 4 jugadores y máster (entregas) | ~8 GB |
+| Resultado procesado (`salida/`) en FLAC | ~3–4 GB (en Opus, ~1 GB) |
 | Subir una voz a 10 Mbps | ~20 min |
 | Procesar una voz en un Mac con chip Apple o en un PC con tarjeta NVIDIA | ~15 min |
 | Procesar una voz en un PC sin tarjeta gráfica | Puede ser más de una hora |

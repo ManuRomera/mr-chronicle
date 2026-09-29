@@ -121,10 +121,11 @@ test("alinea pistas con deriva, una recarga y un reinicio del servidor", () => {
   tramo(path.join(raiz, "beto"), "voz-2", { desde: 160, hasta: DURACION, ppm: -60, clics, reinicioMs: 155_000 });
   fs.writeFileSync(path.join(raiz, "beto", "marcadores.txt"), JSON.stringify({ serverMs: T0 + 200_000, tipo: "cortar", texto: "" }) + "\n");
 
-  execFileSync("node", [path.join(import.meta.dirname, "..", "mr-chronicle-post.mjs"), raiz, "--sin-ruido", "--sin-whisper"], { stdio: "pipe" });
+  const post = args => execFileSync("node", [path.join(import.meta.dirname, "..", "mr-chronicle-post.mjs"), raiz, "--sin-ruido", "--sin-whisper", ...args], { stdio: "pipe" });
+  post(["--formato", "wav"]);
 
   const salida = path.join(raiz, "salida");
-  for (const [archivo, esperados] of [["voz-Ana.bruta.wav", clics], ["voz-Beto.bruta.wav", [10, 145, 290]]]) {
+  for (const [archivo, esperados] of [["voz-Ana.wav", clics], ["voz-Beto.wav", [10, 145, 290]]]) {
     const { ms, duracion } = clicsEn(path.join(salida, "stems", archivo));
     assert.equal(Math.round(duracion), DURACION, `${archivo} dura ${duracion}`);
     assert.equal(ms.length, esperados.length, `${archivo}: ${ms}`);
@@ -135,5 +136,13 @@ test("alinea pistas con deriva, una recarga y un reinicio del servidor", () => {
   assert.match(informe, /Beto voz-2: el servidor de Foundry se reinició/);
   assert.match(informe, /00:03:20.*CORTAR/);
   assert.match(fs.readFileSync(path.join(salida, "marcadores.txt"), "utf8"), /^200\.000\t200\.000\tBeto: ✂ CORTAR/);
+
+  // Por defecto: FLAC (sin pérdida), misma duración, y sin la copia bruta.
+  fs.rmSync(salida, { recursive: true });
+  post([]);
+  const stems = fs.readdirSync(path.join(salida, "stems")).sort();
+  assert.deepEqual(stems, ["voz-Ana.flac", "voz-Beto.flac"]);
+  const dura = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path.join(salida, "stems", "voz-Ana.flac")], { encoding: "utf8" });
+  assert.equal(Math.round(Number(dura)), DURACION);
   fs.rmSync(raiz, { recursive: true });
 });

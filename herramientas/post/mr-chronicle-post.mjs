@@ -14,6 +14,9 @@
  *                      carpeta de la sesión o de la de encima, si existe.
  *   --sin-ruido        No limpiar el ruido
  *   --sin-whisper      No transcribir
+ *   --formato <f>      Formato de las pistas: flac (por defecto, sin pérdida, ~3 veces menos
+ *                      que wav), wav u opus (lo más pequeño, con pérdida mínima)
+ *   --con-bruta        Guardar también la voz sin limpiar (el original ya está en la entrega)
  *   --comprobar        Solo comprobar que están instalados los programas y el modelo
  *
  * Necesita ffmpeg; para limpiar, deep-filter (DeepFilterNet); para transcribir, whisper-cli.
@@ -37,6 +40,8 @@ const { values: op, positionals } = parseArgs({
     config: { type: "string" },
     "sin-ruido": { type: "boolean", default: false },
     "sin-whisper": { type: "boolean", default: false },
+    formato: { type: "string" },
+    "con-bruta": { type: "boolean", default: false },
     comprobar: { type: "boolean", default: false }
   }
 });
@@ -71,7 +76,7 @@ if (op.comprobar) {
 }
 
 if (!positionals[0]) {
-  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--sin-ruido] [--sin-whisper]\n       mr-chronicle-post --comprobar");
+  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--formato flac|wav|opus] [--con-bruta] [--sin-ruido] [--sin-whisper]\n       mr-chronicle-post --comprobar");
   process.exit(1);
 }
 
@@ -83,6 +88,9 @@ const config = rutaConfig ? JSON.parse(fs.readFileSync(rutaConfig, "utf8")) : {}
 if (rutaConfig) console.log(`Configuración: ${rutaConfig}`);
 const MODELO = casa(config.modelo ?? process.env.MR_CHRONICLE_MODELO ?? path.join(CASA, "ggml-large-v3-turbo.bin"));
 if (config.vad) config.vad = casa(config.vad);
+const FORMATO = op.formato ?? config.formato ?? "flac";
+if (!["flac", "wav", "opus"].includes(FORMATO)) { console.error(`Formato desconocido: ${FORMATO} (usa flac, wav u opus).`); process.exit(1); }
+const GUARDAR_BRUTA = op["con-bruta"] || config.guardarBruta === true;
 const avisos = [];
 const aviso = t => { avisos.push(t); console.warn(`⚠ ${t}`); };
 const paso = t => console.log(`\n▸ ${t}`);
@@ -231,7 +239,7 @@ for (const t of tramos) {
 }
 const nombreStem = pista => pista.tipo === "voz" ? `voz-${slug(pista.p.nombre)}` : `foundry-${pista.tipo}`;
 for (const pista of pistas.values()) {
-  const bruto = path.join(SALIDA, "stems", `${nombreStem(pista)}${pista.tipo === "voz" ? ".bruta" : ""}.wav`);
+  const bruto = path.join(TMP, `${nombreStem(pista)}.bruto.wav`);
   if (pista.archivos.length === 1) fs.renameSync(pista.archivos[0], bruto);
   else {
     ejecutar("ffmpeg", ["-v", "error", "-y", ...pista.archivos.flatMap(a => ["-i", a]),
@@ -251,7 +259,7 @@ if (!op["sin-ruido"]) {
       const destino = path.join(TMP, "limpio");
       // -D compensa el retardo del filtro: sin él, la voz limpia se desplazaría unos ms.
       ejecutar("deep-filter", ["-D", "-a", String(config.reduccionRuidoDb ?? 30), "-o", destino, v.bruto]);
-      v.limpio = path.join(SALIDA, "stems", `${nombreStem(v)}.wav`);
+      v.limpio = path.join(TMP, `${nombreStem(v)}.limpio.wav`);
       fs.renameSync(path.join(destino, path.basename(v.bruto)), v.limpio);
       console.log(`  ${v.p.nombre}`);
     }
@@ -297,7 +305,23 @@ if (!op["sin-whisper"]) {
 
 // ─── 5. Exportar ──────────────────────────────────────────────────────────
 
-paso("Exportando");
+paso(`Exportando (pistas en ${FORMATO})`);
+
+/** Pasa una pista de trabajo (WAV) al formato final de stems/. */
+function codificar(entrada, nombre, canales) {
+  const opciones = {
+    wav: ["-c:a", "pcm_s16le"],
+    flac: ["-c:a", "flac"],
+    opus: ["-c:a", "libopus", "-b:a", canales === 2 ? "160k" : "96k"]
+  }[FORMATO];
+  ejecutar("ffmpeg", ["-v", "error", "-y", "-i", entrada, ...opciones, path.join(SALIDA, "stems", `${nombre}.${FORMATO}`)]);
+}
+for (const pista of pistas.values()) {
+  const canales = pista.tipo === "voz" ? 1 : 2;
+  codificar(pista.limpio ?? pista.bruto, nombreStem(pista), canales);
+  if (pista.tipo === "voz" && pista.limpio && GUARDAR_BRUTA) codificar(pista.bruto, `${nombreStem(pista)}.bruta`, canales);
+}
+
 const escribir = (nombre, contenido) => fs.writeFileSync(path.join(SALIDA, nombre), contenido);
 
 if (segmentos.length) {
@@ -331,7 +355,8 @@ const informe = [
   "|---|---|---|---|---|---|",
   ...tramos.map(t => `| ${t.p.nombre} | ${t.prefijo} | ${((t.r.a + ajuste(t.p) - t0) / 1000).toFixed(3)} s | ${t.ppm.toFixed(1)} ppm | ${t.r.residuoMax.toFixed(1)} ms | ${t.r.anclasUsadas}/${t.r.anclasTotales} |`),
   "",
-  "Todas las pistas de `stems/` empiezan en 0:00 y duran lo mismo: arrástralas al editor y ya están alineadas.",
+  `Todas las pistas de \`stems/\` (en ${FORMATO}) empiezan en 0:00 y duran lo mismo: arrástralas al editor y ya están alineadas.`,
+  "La voz original, sin limpiar, sigue en la carpeta de cada participante (o usa --con-bruta para tenerla también alineada en stems/).",
   "Importa `marcadores.txt` en Audacity con Archivo → Importar → Etiquetas.",
   "",
   "## Para cortar antes de publicar",

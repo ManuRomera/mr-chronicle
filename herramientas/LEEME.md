@@ -57,7 +57,7 @@ En `<sesión>/salida/`:
 | Archivo | Qué es |
 |---|---|
 | `informe.md` | **Léelo primero.** Quién no quiere que se publique su voz, qué hay que cortar, qué música revisar por licencias y si alguna pista tiene problemas. |
-| `stems/` | Una pista por persona (limpia y en bruto), más música, ambiente y efectos. Todas empiezan en 0:00: arrástralas a Reaper o Audacity y ya están alineadas. |
+| `stems/` | Una pista limpia por persona, más música, ambiente y efectos, en FLAC (sin pérdida). Todas empiezan en 0:00: arrástralas a Reaper o Audacity y ya están alineadas. Para ocupar menos, `"formato": "opus"` en `campana.json`; para tener también la voz sin limpiar, `--con-bruta`. |
 | `marcadores.txt` | Marcadores de la partida. En Audacity: Archivo → Importar → Etiquetas. |
 | `transcript.md`, `.srt`, `.json` | Transcripción con hora y hablante; subtítulos. |
 

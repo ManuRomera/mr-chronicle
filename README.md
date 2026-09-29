@@ -124,6 +124,7 @@ Si en la carpeta de la sesión, o en la de encima, hay un `campana.json`, se usa
 | `diccionario` | Nombres propios de la campaña; ayudan a Whisper a escribirlos bien. |
 | `correcciones` | Los que aun así escribe mal: `{"Strath": "Strahd"}`. Solo cambia palabras completas. |
 | `ajustesMs` | Desfase fijo por participante, calibrado con las palmadas (ver abajo). |
+| `formato` | `flac` (por defecto), `opus` o `wav`: ver abajo. |
 | `reduccionRuidoDb` | Cuánto ruido quita DeepFilterNet (30 dB deja la voz natural; 100 lo quita todo). |
 | `umbralSilencioDb` | Por debajo de este nivel se considera silencio al ajustar los tiempos de la transcripción. |
 
@@ -133,9 +134,17 @@ No actives `vad`: el detector de voz de whisper.cpp junta toda la voz de una per
 
 | Archivo | Qué es |
 |---|---|
-| `stems/voz-<nombre>.wav` | Voz limpia. Todas las pistas empiezan en 0:00 y duran lo mismo. |
-| `stems/voz-<nombre>.bruta.wav` | Voz original, alineada. |
-| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry (grabado en Opus a 160 kbps; llega unos 0,1 s tarde respecto a las voces, sin importancia para música de fondo). |
+| `stems/voz-<nombre>.flac` | Voz limpia. Todas las pistas empiezan en 0:00 y duran lo mismo. |
+| `stems/foundry-musica.flac`, `foundry-ambiente.flac`, `foundry-efectos.flac` | Lo que sonó en Foundry (grabado en Opus a 160 kbps; llega unos 0,1 s tarde respecto a las voces, sin importancia para música de fondo). |
+| `stems/voz-<nombre>.bruta.flac` | Solo con `--con-bruta`: la voz sin limpiar, alineada. El original sin alinear siempre está en la carpeta de cada participante. |
+
+**Formato de las pistas** (`--formato` o `"formato"` en `campana.json`):
+
+| Formato | Qué es | 4 h de voz |
+|---|---|---|
+| `flac` (por defecto) | Sin pérdida: idéntico al WAV y unas 3 veces más pequeño. Lo abren Reaper, Audacity y la mayoría de editores. | ~0,5 GB |
+| `opus` | Lo más pequeño, con una pérdida que en un podcast no se nota. | ~0,15 GB |
+| `wav` | Sin comprimir, para editores que no abran FLAC. | ~1,4 GB |
 | `transcript.md`, `.json`, `.srt` | Transcripción con hablante y hora. |
 | `marcadores.txt` | Marcadores, para importar en Audacity (Archivo → Importar → Etiquetas). |
 | `musica.json` | Qué sonó y cuándo. |

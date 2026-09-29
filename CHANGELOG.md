@@ -1,5 +1,10 @@
 # Cambios
 
+## 0.1.4
+
+- **Pistas procesadas en FLAC por defecto** (sin pérdida, unas 3 veces menos que WAV). Opción `--formato opus` (o `"formato": "opus"`) para lo mínimo, y `wav` si hace falta. Una sesión de 4 horas con 5 personas pasa de ~22 GB en `stems/` a ~3–4 GB (o ~1 GB en Opus).
+- **Ya no se guarda por defecto la voz sin limpiar** en `stems/` (el original sigue en la entrega). Con `--con-bruta` se guarda también, alineada.
+
 ## 0.1.3
 
 - **Reloj de grabación con segundos** (h:mm:ss) en el indicador, el panel y la mesa. Antes solo contaba minutos enteros y parecía parado.

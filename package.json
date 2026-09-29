@@ -1,6 +1,6 @@
 {
   "name": "mr-chronicle",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "description": "MR · Chronicle: grabación multipista de partidas de Foundry VTT para podcast.",
