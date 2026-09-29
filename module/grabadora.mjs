@@ -8,7 +8,7 @@
  * instante del reloj del servidor. Con todas las anclas, la postproducción calcula la
  * frecuencia real de la tarjeta de sonido y coloca la pista en la línea de tiempo común.
  */
-import { anadirLinea } from "./opfs.mjs";
+import { RAIZ, anadirLinea, escribirJSON, listar, borrar } from "./opfs.mjs";
 import { sincronizar } from "./tiempo.mjs";
 
 const RUTA = foundry.utils.getRoute("modules/mr-chronicle/workers");
@@ -49,7 +49,7 @@ export class Pista {
     this.fuente.connect(this.nodo);
     this.nodo.connect(this.silencio).connect(this.ctx.destination);
     this.nodo.port.onmessage = ({ data }) => {
-      this.nivel = data.nivel;
+      if ("nivel" in data) this.nivel = data.nivel;
       if ("frame" in data) this.meta = data;
       if (this.latenciaEntradaMs !== null && this.grabando) this.vigilarSenal();
     };
@@ -67,6 +67,7 @@ export class Pista {
         if (data.aviso) ui.notifications.warn(`MR · Chronicle: ${data.aviso}`);
         if (data.error) { this.errores.push(data.error); reject(new Error(data.error)); this.alCambiar(); }
         if (data.cerrado) this.cerrado?.(data);
+        if (data.escrito) this.ultimaEscritura = performance.now();
       };
     });
     this.worker.postMessage({
@@ -100,8 +101,21 @@ export class Pista {
     this.nodo?.port.postMessage({ pausa });
   }
 
+  /** Avisa en pantalla (una vez) y en la lista de la mesa. */
+  fallo(mensaje) {
+    this.errores ??= [];
+    if (this.errores.includes(mensaje)) return;
+    this.errores.push(mensaje);
+    ui.notifications.error(`MR · Chronicle: ${mensaje}`, { permanent: true });
+    this.alCambiar();
+  }
+
   /** Relaciona la última muestra conocida con la hora del servidor y lo guarda. */
   async anclar() {
+    // De paso, se vigila que la grabación siga llegando al disco.
+    if (this.grabando && performance.now() - (this.ultimaEscritura ?? this.inicioPerf) > 20_000) {
+      this.fallo(`la pista de ${this.tipo} no se está guardando en el disco. Avisa al máster y revisa el espacio libre.`);
+    }
     const meta = this.meta;
     const reloj = await sincronizar();
     if (!meta || !reloj) return; // sin conexión: la regresión interpola con las demás anclas
@@ -122,7 +136,7 @@ export class Pista {
       serverMs: Math.round((perfMs + reloj.offset) * 1000) / 1000,
       epochMs: Math.round(performance.timeOrigin + perfMs),
       rttMs: Math.round(reloj.rttMs * 10) / 10
-    });
+    }).catch(() => {}); // el fallo ya se muestra en pantalla
   }
 
   get minutos() {
@@ -179,4 +193,36 @@ export async function pistaMicro(deviceId) {
   p.soltar = () => { soltar(); stream.getTracks().forEach(t => t.stop()); ctx.close(); };
   await p.preparar();
   return p;
+}
+
+/**
+ * Prueba de verdad que este navegador puede guardar una grabación: el mismo Worker escribe un
+ * trozo corto en OPFS y se comprueba que se puede leer. Se hace al aceptar, antes de la partida.
+ */
+export async function probarAlmacenamiento() {
+  const ruta = [RAIZ, "_prueba"];
+  const worker = new Worker(`${RUTA}/escritor-worker.js`, { type: "module" });
+  const canal = new MessageChannel();
+  try {
+    const cerrado = new Promise((resolve, reject) => {
+      const espera = setTimeout(() => reject(new Error("el almacenamiento no responde")), 8000);
+      worker.onerror = e => { clearTimeout(espera); reject(new Error(e.message || "no se pudo cargar el escritor")); };
+      worker.onmessage = ({ data }) => {
+        if (data.error) { clearTimeout(espera); reject(new Error(data.error)); }
+        if (data.listo) canal.port1.postMessage({ datos: new Int16Array(4800), fin: true });
+        if (data.cerrado) { clearTimeout(espera); resolve(); }
+      };
+    });
+    worker.postMessage({ iniciar: { ruta, prefijo: "prueba", sampleRate: 48000, canales: 1, formato: "wav" }, puerto: canal.port2 }, [canal.port2]);
+    await cerrado;
+    await escribirJSON(ruta, "prueba.json", { ok: true });
+    const archivos = await listar(ruta);
+    const wav = archivos.find(a => a.nombre === "prueba-000001.wav");
+    if (wav?.archivo.size !== 44 + 9600 || !archivos.some(a => a.nombre === "prueba.json")) {
+      throw new Error("lo escrito no aparece al leerlo");
+    }
+  } finally {
+    worker.terminate();
+    await borrar(ruta).catch(() => {});
+  }
 }

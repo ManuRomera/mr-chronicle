@@ -31,13 +31,18 @@ export async function leerJSON(ruta, nombre) {
   } catch { return null; }
 }
 
-// Una cola por archivo: dos escrituras al mismo archivo nunca se pisan.
+/** Quién se entera de un fallo de escritura (el panel lo muestra en pantalla). */
+let alFallar = error => console.error("mr-chronicle | Error de almacenamiento", error);
+export const siFalla = fn => { alFallar = fn; };
+
+// Una cola por archivo: dos escrituras al mismo archivo nunca se pisan. Un fallo no bloquea la
+// cola, pero sí llega a quien escribía y a la pantalla: una grabación que no se guarda no puede
+// pasar en silencio.
 const colas = new Map();
 function enCola(clave, tarea) {
-  const siguiente = (colas.get(clave) ?? Promise.resolve()).then(tarea).catch(error =>
-    console.error("mr-chronicle | Error de almacenamiento", error));
-  colas.set(clave, siguiente);
-  return siguiente;
+  const siguiente = (colas.get(clave) ?? Promise.resolve()).then(tarea);
+  colas.set(clave, siguiente.catch(() => {}));
+  return siguiente.catch(error => { alFallar(error); throw error; });
 }
 
 export function escribirJSON(ruta, nombre, datos) {

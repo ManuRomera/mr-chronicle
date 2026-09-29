@@ -1,7 +1,7 @@
 <div class="mrc-principal">
-  {{#unless puedeGrabar}}
-  <p class="mrc-aviso rojo">Este navegador no puede grabar. Usa Chrome, Edge o la app de escritorio de Foundry.</p>
-  {{/unless}}
+  {{#if problema}}
+  <p class="mrc-aviso rojo">{{problema}}</p>
+  {{/if}}
 
   {{! ─── Sesión ─── }}
   <section class="mrc-bloque">
@@ -23,18 +23,21 @@
       <div class="mrc-botones"><button type="button" data-action="preparar" class="mrc-principal-btn">Preparar sesión</button></div>
       {{else}}
       <div class="mrc-botones">
-        {{#if (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="grabando" class="mrc-principal-btn">● Iniciar grabación</button>{{/if}}
+        {{#if (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="grabando" class="mrc-principal-btn" {{disabled consentimientos.nadie}}>● Iniciar grabación</button>{{/if}}
         {{#if (eq fase "grabando")}}<button type="button" data-action="fase" data-fase="pausada">❚❚ Pausar a todos</button>{{/if}}
         {{#if (eq fase "pausada")}}<button type="button" data-action="fase" data-fase="grabando" class="mrc-principal-btn">▶ Reanudar a todos</button>{{/if}}
         {{#if grabable}}{{#unless (eq fase "preparada")}}<button type="button" data-action="fase" data-fase="finalizada">■ Finalizar</button>{{/unless}}{{/if}}
         {{#if (or finalizada (eq fase "preparada"))}}<button type="button" data-action="cerrarSesion">Cerrar sesión</button>{{/if}}
       </div>
+      {{#if (eq fase "preparada")}}
+      <p class="mrc-nota">{{#if consentimientos.nadie}}Nadie ha aceptado todavía: cada participante tiene que aceptar en su panel antes de iniciar.{{else}}Han aceptado {{consentimientos.aceptados}} de {{consentimientos.activos}}.{{#unless consentimientos.todos}} A quien no acepte no se le grabará.{{/unless}}{{/if}}</p>
+      {{/if}}
       {{/unless}}
     {{/if}}
   </section>
 
   {{! ─── Tu grabación ─── }}
-  {{#if grabable}}
+  {{#if grabable}}{{#unless problema}}
   <section class="mrc-bloque">
     <h3>Tu grabación</h3>
     {{#if yo.grabando}}
@@ -73,7 +76,7 @@
     {{#if pocoEspacio}}<p class="mrc-aviso ambar">Queda poco espacio para grabar ({{libreGB}} GB). Cuatro horas ocupan unos 1,4 GB.</p>{{/if}}
     {{#if yo.error}}<p class="mrc-aviso rojo">{{yo.error}}</p>{{/if}}
   </section>
-  {{/if}}
+  {{/unless}}{{/if}}
 
   {{! ─── Entrega ─── }}
   {{#if finalizada}}{{#if hayLocal}}

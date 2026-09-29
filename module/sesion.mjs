@@ -7,9 +7,9 @@
  *
  * sesion = {id, nombre, fase: preparada|grabando|pausada|finalizada, inicioServerMs, finServerMs, grabarFoundry}
  */
-import { pistaMicro } from "./grabadora.mjs";
+import { pistaMicro, probarAlmacenamiento } from "./grabadora.mjs";
 import { pistasFoundry, registrarMusica } from "./foundry-audio-tap.mjs";
-import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, existe } from "./opfs.mjs";
+import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, existe, siFalla } from "./opfs.mjs";
 import { ahora, sincronizar } from "./tiempo.mjs";
 import { subir, descargar, crearCarpetas } from "./entrega.mjs";
 
@@ -29,7 +29,25 @@ class Chronicle {
   get sesion() { return game.settings.get(ID, "sesion"); }
   get ruta() { return [RAIZ, this.sesion.id, game.user.id]; }
   get grabando() { return this.pistas.some(p => p.grabando); }
-  get puedeGrabar() { return Boolean(navigator.userAgentData?.brands?.some(b => b.brand === "Chromium")); }
+
+  /** Por qué este navegador no puede grabar, o null si puede. */
+  get problemaNavegador() {
+    if (!window.isSecureContext) {
+      return {
+        codigo: "https",
+        texto: `Foundry está abierto sin HTTPS (${location.origin}). El navegador solo permite el micro y guardar la grabación en páginas seguras. El servidor de Foundry tiene que usar https://, o, en el propio ordenador que hace de servidor, abrir http://localhost.`
+      };
+    }
+    // La app de escritorio de Foundry (Electron) no guardó la grabación en las pruebas y no
+    // puede mostrar el selector de carpetas de «Descargar».
+    if (/Electron\//.test(navigator.userAgent)) {
+      return { codigo: "app", texto: "Estás en la app de escritorio de Foundry, que no puede grabar. Abre la partida en Chrome o Edge (con la misma dirección)." };
+    }
+    if (!navigator.userAgentData?.brands?.some(b => b.brand === "Chromium")) {
+      return { codigo: "navegador", texto: "Este navegador no puede grabar. Usa Chrome o Edge." };
+    }
+    return null;
+  }
 
   registrar() {
     game.settings.register(ID, "sesion", {
@@ -48,6 +66,12 @@ class Chronicle {
   }
 
   async preparado() {
+    siFalla(error => {
+      const texto = `No se pudo guardar en el disco: ${error.message}`;
+      if (this.error !== texto) ui.notifications.error(`MR · Chronicle: ${texto}`, { permanent: true });
+      this.error = texto;
+      this.refrescar();
+    });
     game.socket.on(SOCKET, msg => this.alRecibir(msg));
     this.indicador();
     setInterval(() => this.emitirEstado(), ESTADO_CADA_MS);
@@ -96,7 +120,7 @@ class Chronicle {
     const acepto = this.manifiesto?.consentimiento.grabar;
 
     if (s.fase === "preparada" && !acepto) this.abrirPanel();
-    if (["grabando", "pausada"].includes(s.fase) && acepto && !this.grabando) {
+    if (["grabando", "pausada"].includes(s.fase) && acepto && !this.grabando && !this.problemaNavegador) {
       if (alCargar) {
         ui.notifications.info("MR · Chronicle: tu grabación seguirá en cuanto hagas clic en la mesa.");
         await game.audio.unlock;
@@ -114,12 +138,22 @@ class Chronicle {
 
   async aceptar({ grabar, publicar, deviceId }) {
     if (!grabar) return this.retirar();
+    const problema = this.problemaNavegador;
+    if (problema) { this.error = problema.texto; return this.refrescar(); }
     try { localStorage.setItem(`${ID}.micro`, deviceId ?? ""); } catch { /* sin almacenamiento local */ }
     await navigator.storage.persist?.();
-    const previo = this.manifiesto?.consentimiento;
-    await this.guardarManifiesto({
-      consentimiento: { grabar: true, publicar, fecha: previo?.fecha ?? new Date().toISOString() }
-    });
+    // Antes de dar por bueno el consentimiento, se comprueba que de verdad se puede guardar.
+    try {
+      await probarAlmacenamiento();
+      const previo = this.manifiesto?.consentimiento;
+      await this.guardarManifiesto({
+        consentimiento: { grabar: true, publicar, fecha: previo?.fecha ?? new Date().toISOString() }
+      });
+    } catch (error) {
+      this.error = `Este navegador no consigue guardar la grabación (${error.message}). No se ha registrado tu consentimiento: prueba con Chrome o Edge actualizados.`;
+      return this.refrescar();
+    }
+    this.error = null;
     if (!this.micro || this.micro.deviceId !== deviceId) await this.probarMicro(deviceId);
     if (["grabando", "pausada"].includes(this.sesion.fase) && !this.grabando) await this.empezarTramo();
     this.refrescar();
@@ -153,7 +187,7 @@ class Chronicle {
   }
 
   async empezarTramo() {
-    if (this.ocupado) return;
+    if (this.ocupado || this.problemaNavegador) return;
     this.ocupado = true;
     try {
       const tramo = (this.manifiesto?.tramos ?? 0) + 1;
@@ -310,7 +344,7 @@ class Chronicle {
       entregado: this.manifiesto?.entregado ?? null,
       error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0]
         ?? (voz?.sinSenal ? "No llega sonido del micro. ¿Está silenciado o desconectado?" : null),
-      navegador: this.puedeGrabar
+      problema: this.problemaNavegador?.codigo ?? null
     };
   }
 

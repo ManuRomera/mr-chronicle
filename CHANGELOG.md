@@ -1,5 +1,18 @@
 # Cambios
 
+## 0.1.1
+
+Correcciones tras la primera prueba real. **Sigue en desarrollo (WIP).**
+
+- **Diagnóstico claro** en lugar de «este navegador no puede grabar»:
+  - Foundry abierto sin HTTPS (el navegador bloquea el micro y el almacenamiento), con la solución.
+  - Grabación bloqueada en la app de escritorio de Foundry, que no guardaba nada.
+- **No se puede iniciar la grabación sin consentimientos.** Si falta alguien, el máster ve a quién no se grabará y tiene que confirmar. El recuento se actualiza en cuanto alguien acepta.
+- **Prueba de guardado al aceptar:** si el navegador no consigue escribir la grabación, no deja aceptar y lo explica.
+- **Vigilancia durante la partida:** alerta en pantalla y en la mesa si una pista deja de guardarse. Los errores de disco ya no se quedan en la consola.
+- **Una entrega sin grabación es un error,** no «Entregado».
+- **Barra de nivel del micro fluida** (20 veces por segundo en vez de una).
+
 ## 0.1.0
 
 Primera versión pública. **En desarrollo (WIP):** probada de principio a fin en local, pendiente de una partida real larga con varios jugadores.

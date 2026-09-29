@@ -16,6 +16,16 @@ const FASES = {
   finalizada: "Finalizada: toca entregar"
 };
 
+const PROBLEMAS = {
+  https: "No puede grabar: Foundry sin HTTPS",
+  app: "No puede grabar: está en la app de Foundry",
+  navegador: "No puede grabar: navegador no compatible"
+};
+
+/** Quién está conectado y no ha aceptado grabar (según el último estado recibido). */
+const sinConsentimiento = () =>
+  game.users.filter(u => u.active && !chronicle.estados.get(u.id)?.acepta);
+
 const minutosATexto = m => `${Math.floor(m / 60)} h ${String(Math.floor(m % 60)).padStart(2, "0")} min`;
 
 export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2)) {
@@ -66,7 +76,12 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       s,
       faseTexto: FASES[s?.fase] ?? "",
       grabarFoundry: s?.grabarFoundry ?? true,
-      puedeGrabar: chronicle.puedeGrabar,
+      problema: chronicle.problemaNavegador?.texto ?? null,
+      consentimientos: (() => {
+        const activos = game.users.filter(u => u.active).length;
+        const faltan = sinConsentimiento().length;
+        return { aceptados: activos - faltan, activos, todos: faltan === 0, nadie: faltan === activos };
+      })(),
       yo,
       manifiesto: chronicle.manifiesto,
       micros: micros.map((d, i) => ({ id: d.deviceId, nombre: d.label || `Micrófono ${i + 1}`, elegido: d.deviceId === elegido })),
@@ -91,7 +106,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     contexto.participantes = game.users.filter(u => u.active).map(u => {
       const e = chronicle.estados.get(u.id);
       let clase = "gris", texto = "Sin respuesta";
-      if (e && !e.navegador) [clase, texto] = ["rojo", "Navegador no compatible"];
+      if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
       else if (e?.error) [clase, texto] = ["rojo", e.error];
       else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${minutosATexto(e.minutos)}`] : ["verde", `Grabando · ${minutosATexto(e.minutos)}`];
       else if (e?.entregado) [clase, texto] = ["verde", "Entregado"];
@@ -105,7 +120,11 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
 
   /** Solo la lista de participantes: la llama el estado que llega por el socket. */
   refrescarMesa() {
-    if (this.rendered) this.render({ parts: ["mesa"] });
+    if (!this.rendered) return;
+    // Si cambia quién ha aceptado, también cambian la nota y el botón de iniciar: se repinta todo.
+    const firma = sinConsentimiento().map(u => u.id).join() + "|" + game.users.filter(u => u.active).length;
+    if (firma !== this.firma) { this.firma = firma; return this.render(); }
+    this.render({ parts: ["mesa"] });
   }
 
   async _onRender(contexto, opciones) {
@@ -117,7 +136,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
         const nivel = chronicle.micro?.nivel ?? 0;
         barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
         barra.dataset.saturado = nivel > 0.98;
-      }, 200);
+      }, 60);
     }
   }
 
@@ -133,6 +152,23 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
 
   static async #fase(evento, boton) {
     const fase = boton.dataset.fase;
+    // Iniciar: nunca sin consentimientos, y avisando de a quién no se va a grabar.
+    if (fase === "grabando" && chronicle.sesion?.fase === "preparada") {
+      const faltan = sinConsentimiento();
+      if (faltan.length === game.users.filter(u => u.active).length) {
+        return ui.notifications.error("MR · Chronicle: nadie ha aceptado todavía. Cada participante tiene que aceptar en su panel antes de iniciar.");
+      }
+      if (faltan.length) {
+        const yoFalto = faltan.some(u => u.isSelf);
+        const ok = await foundry.applications.api.DialogV2.confirm({
+          window: { title: "Faltan consentimientos" },
+          content: `<p>No han aceptado y <strong>no se les grabará</strong>: ${faltan.map(u => foundry.utils.escapeHTML(u.name)).join(", ")}.</p>`
+            + (yoFalto && chronicle.sesion.grabarFoundry ? "<p>Tú tampoco has aceptado: no se grabará tu voz <strong>ni la música y los efectos de Foundry</strong>.</p>" : "")
+            + "<p>Si alguien acepta después, empezará a grabar en ese momento. ¿Iniciar igualmente?</p>"
+        });
+        if (!ok) return;
+      }
+    }
     if (fase === "finalizada") {
       const ok = await foundry.applications.api.DialogV2.confirm({
         window: { title: "Finalizar la sesión" },

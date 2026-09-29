@@ -9,6 +9,16 @@
 import { listar } from "./opfs.mjs";
 
 const FP = () => foundry.applications.apps.FilePicker.implementation;
+
+/** Lo que hay en este navegador; error si no hay ni un trozo de audio. */
+async function grabacionLocal(rutaLocal) {
+  const archivos = await listar(rutaLocal).catch(() => []);
+  if (!archivos.some(a => /\.(wav|ogg)$/.test(a.nombre))) {
+    throw new Error("En este navegador no hay ninguna grabación de esta sesión. Si grabaste en otro navegador u ordenador, entrégala desde allí.");
+  }
+  return archivos;
+}
+
 export const rutaServidor = (sesionId, userId) => `mr-chronicle/${sesionId}/${userId}`;
 
 /** La crea quien pueda (el máster). Ignora las carpetas que ya existen. */
@@ -45,7 +55,7 @@ export async function subir({ rutaLocal, sesionId, userId, pedirCarpeta, progres
   // Primero el audio, luego las anclas y marcadores, y el manifiesto el último:
   // si el manifiesto está en el servidor, la entrega está completa.
   const orden = n => n.endsWith(".wav") ? 0 : n === "manifiesto.json" ? 2 : 1;
-  const archivos = (await listar(rutaLocal)).sort((a, b) => orden(a.nombre) - orden(b.nombre));
+  const archivos = (await grabacionLocal(rutaLocal)).sort((a, b) => orden(a.nombre) - orden(b.nombre));
   const pendientes = archivos.filter(a => !ya.has(a.nombre));
 
   let hechos = archivos.length - pendientes.length;
@@ -73,10 +83,10 @@ export async function subir({ rutaLocal, sesionId, userId, pedirCarpeta, progres
  * cualquiera del grupo puede procesar la sesión.
  */
 export async function descargar({ rutaLocal, sesionId, carpeta, progreso }) {
+  const archivos = await grabacionLocal(rutaLocal);
   const elegida = await window.showDirectoryPicker({ id: "mr-chronicle", mode: "readwrite" });
   const sesion = elegida.name === sesionId ? elegida : await elegida.getDirectoryHandle(sesionId, { create: true });
   const dir = await sesion.getDirectoryHandle(carpeta, { create: true });
-  const archivos = await listar(rutaLocal);
   let hechos = 0;
   for (const { nombre, archivo } of archivos) {
     const w = await (await dir.getFileHandle(nombre, { create: true })).createWritable();

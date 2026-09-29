@@ -86,6 +86,13 @@ function escribirBytes(bytes) {
   trozo.bytes += bytes.length;
 }
 
+// Señal de vida para el hilo principal: si deja de llegar, la grabación no se está guardando.
+let ultimoAviso = 0;
+function informar() {
+  const t = Date.now();
+  if (t - ultimoAviso > 5000) { ultimoAviso = t; self.postMessage({ escrito: true }); }
+}
+
 function cerrar() {
   if (!trozo) return;
   if (cfg.formato === "wav") trozo.handle.write(cabecera(trozo.bytes), { at: 0 });
@@ -112,7 +119,7 @@ function escribir(msg) {
       datos = datos.subarray(cabe);
       if (trozo.bytes >= bytesPorTrozo) cerrar();
     }
-    if (trozo) trozo.handle.flush();
+    if (trozo) { trozo.handle.flush(); informar(); }
     if (msg.fin) { cerrar(); self.postMessage({ cerrado: true, trozos: n }); }
   });
 }
@@ -128,7 +135,7 @@ async function escribirOpus(msg) {
     codificador.encode(audio);
     audio.close();
   }
-  encolar(async () => { if (trozo) trozo.handle.flush(); });
+  encolar(async () => { if (trozo) { trozo.handle.flush(); informar(); } });
   if (msg.fin) {
     await codificador.flush();
     encolar(async () => { cerrar(); self.postMessage({ cerrado: true, trozos: n }); });

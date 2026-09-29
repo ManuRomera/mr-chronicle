@@ -5,7 +5,7 @@
  *   sin pasar por el hilo principal.
  * - Cuenta las muestras escritas: esa cuenta es la posición exacta en el archivo, lo que
  *   permite después corregir la deriva del reloj de la tarjeta de sonido.
- * - Cada segundo manda al hilo principal la pareja (muestra, currentTime) y el nivel.
+ * - Cada segundo manda al hilo principal la pareja (muestra, currentTime); el nivel, 20 veces por segundo.
  * - En pausa escribe silencio: la línea de tiempo nunca se rompe.
  */
 const CUANTOS_POR_BLOQUE = 256; // ≈ 0,68 s a 48 kHz
@@ -22,6 +22,7 @@ class Captura extends AudioWorkletProcessor {
     this.nuevoBloque();
     this.pico = 0;
     this.cuantosMeta = 0;
+    this.cuantosNivel = 0;
     this.port.onmessage = ({ data }) => {
       if (data.escritor) this.escritor = data.escritor;
       if ("grabar" in data) { this.grabando = data.grabar; this.cuantosMeta = 0; }
@@ -55,11 +56,17 @@ class Captura extends AudioWorkletProcessor {
     // Nivel para el medidor, también antes de grabar (sirve para probar el micro).
     for (let i = 0; i < (entrada[0]?.length ?? 0); i++) this.pico = Math.max(this.pico, Math.abs(entrada[0][i]));
 
+    // Nivel para el medidor unas 20 veces por segundo, para que la barra se mueva con fluidez.
+    if (++this.cuantosNivel >= 19) {
+      this.port.postMessage({ nivel: this.pico });
+      this.pico = 0;
+      this.cuantosNivel = 0;
+    }
+
     if (this.grabando) {
       if (this.cuantosMeta === 0) {
         // `frames` es la muestra del archivo que corresponde a `currentTime`.
-        this.port.postMessage({ frame: this.frames, ctxTime: currentTime, nivel: this.pico });
-        this.pico = 0;
+        this.port.postMessage({ frame: this.frames, ctxTime: currentTime });
       }
       this.cuantosMeta = (this.cuantosMeta + 1) % 375; // ≈ 1 s
 
@@ -72,9 +79,6 @@ class Captura extends AudioWorkletProcessor {
       }
       this.frames += n;
       if (this.pos >= this.bloque.length) this.enviarBloque();
-    } else if (++this.cuantosMeta % 375 === 0) {
-      this.port.postMessage({ nivel: this.pico });
-      this.pico = 0;
     }
     return true;
   }

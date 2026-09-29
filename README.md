@@ -12,6 +12,16 @@ Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada
 
 El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
 
+## Antes de nada: HTTPS y navegador
+
+El navegador **solo permite el micro y guardar la grabación en páginas seguras**. Si en la barra de direcciones pone «No es seguro» (por ejemplo, `http://192.168.1.20:30000` o `http://tu-ip:30000`), no se podrá grabar y el panel lo avisa.
+
+- **Para jugar por Internet**, Foundry tiene que ir por `https://`. Lo más sencillo es un dominio (vale uno gratuito, como DuckDNS) y [Caddy](https://caddyserver.com) delante de Foundry, que saca el certificado solo. También se puede configurar un certificado en las opciones de Foundry.
+- **En el ordenador que hace de servidor**, `http://localhost:30000` sí cuenta como seguro.
+- **Para una prueba rápida en tu red**, sin HTTPS: en Chrome, entra en `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, añade la dirección de Foundry y reinicia Chrome.
+
+**Navegador:** Chrome o Edge. **No uses la app de escritorio de Foundry para grabar:** no guarda la grabación y el panel lo bloquea. Si eres el máster y Foundry corre en tu ordenador, abre la partida en Chrome con `http://localhost:30000`.
+
 ## Instalación
 
 Solo se instala en el **servidor de Foundry** (el ordenador o el servicio donde corre). Los jugadores no instalan nada.
@@ -27,15 +37,15 @@ Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible
 ## Para jugar
 
 **Requisitos:**
-- **Chrome, Edge o la app de escritorio de Foundry.** Firefox y Safari no están soportados.
+- **Chrome o Edge**, con Foundry abierto por `https://` o `localhost` (ver arriba). Ni la app de escritorio de Foundry, ni Firefox, ni Safari.
 - **Cascos:** con altavoces, tu micro recogería a los demás.
 - Espacio libre para 4 horas de partida: **1,5 GB** los jugadores, **unos 2,5 GB** el máster (su voz más la música y los efectos de Foundry, estos comprimidos en Opus).
 - **No suspendas el ordenador** (ni cierres la tapa del portátil) durante la partida: la grabación se para hasta que vuelvas. **No uses el modo incógnito** ni borres los datos del navegador antes de entregar.
 
 **Pasos:**
 1. El máster abre el panel con el indicador **MR · Chronicle** (arriba, en el centro) y pulsa **Preparar sesión**.
-2. A cada participante se le abre el panel: elige micro, comprueba que el medidor se mueve y **acepta** grabar (y, aparte, publicar).
-3. El máster pulsa **Iniciar grabación**. El indicador se pone rojo en todos los que graban.
+2. A cada participante se le abre el panel: elige micro, comprueba que el medidor se mueve y **acepta** grabar (y, aparte, publicar). Al aceptar se hace una prueba de guardado; si el navegador no puede guardar, lo dice y no deja aceptar.
+3. El máster pulsa **Iniciar grabación**. No se puede iniciar si nadie ha aceptado, y si falta alguien avisa de a quién no se grabará. Si el propio máster no acepta, no se graba su voz ni la música de Foundry. El indicador se pone rojo en todos los que graban.
 4. Durante la partida:
    - **★ Marcar momento** (o `Ctrl+Shift+M`) deja una marca para la edición.
    - **✂ Cortar esto** avisa de algo que no debe publicarse.
@@ -44,7 +54,7 @@ Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible
    - **Entregar:** la sube al servidor de Foundry. Si se corta, se vuelve a pulsar y solo sube lo que falte.
    - **Descargar:** la guarda en la carpeta que elija. Si todos eligen la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox (la que sincroniza su ordenador), las grabaciones se juntan solas en `<sesión>/<nombre>/`, y cualquiera del grupo puede procesarlas.
 
-Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Si el micro se desconecta o deja de llegar sonido durante 30 s, avisa en pantalla (y el máster lo ve en la lista de la mesa).
+Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Si el micro se desconecta, si deja de llegar sonido durante 30 s o si la grabación deja de guardarse en el disco, sale una alerta roja en pantalla, y el máster lo ve en la lista de la mesa.
 
 ### Configuración del máster (una sola vez)
 

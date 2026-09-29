@@ -74,7 +74,7 @@
   height: 8px; border-radius: 4px; background: var(--mrc-fondo); overflow: hidden;
 }
 .mr-chronicle .mrc-nivel > span, .mr-chronicle .mrc-progreso > span {
-  display: block; height: 100%; width: 0; background: var(--mrc-verde); transition: width .15s linear;
+  display: block; height: 100%; width: 0; background: var(--mrc-verde); transition: width .06s linear;
 }
 .mr-chronicle .mrc-nivel > span[data-saturado="true"] { background: var(--mrc-rojo); }
 
@@ -107,3 +107,4 @@
 
 @keyframes mrc-latido { 50% { opacity: .35; } }
 #mr-chronicle-indicador[data-estado="espera"] { background: #6b4c10; border-color: #f2b33d; color: #fff; }
+.mr-chronicle .mrc-botones button:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.6); }
