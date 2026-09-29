@@ -10,7 +10,7 @@
   "scripts": {
     "test": "node --test herramientas/post/test/*.test.mjs",
     "post": "node herramientas/post/mr-chronicle-post.mjs",
-    "herramientas": "rm -rf dist/h && mkdir -p dist/h/MR-Chronicle-herramientas && cp -R herramientas/post herramientas/instalar herramientas/servidor herramientas/LEEME.md prompts/cronica.md dist/h/MR-Chronicle-herramientas/ && rm -rf dist/h/MR-Chronicle-herramientas/post/test && (cd dist/h && zip -qr ../MR-Chronicle-herramientas.zip MR-Chronicle-herramientas) && rm -rf dist/h && echo dist/MR-Chronicle-herramientas.zip"
+    "herramientas": "rm -rf dist/h && mkdir -p dist/h/MR-Chronicle-herramientas && cp -R herramientas/post herramientas/instalar herramientas/servidor herramientas/LEEME.md docs/MANUAL.md prompts/cronica.md dist/h/MR-Chronicle-herramientas/ && rm -rf dist/h/MR-Chronicle-herramientas/post/test && (cd dist/h && zip -qr ../MR-Chronicle-herramientas.zip MR-Chronicle-herramientas) && rm -rf dist/h && echo dist/MR-Chronicle-herramientas.zip"
   },
   "engines": {
     "node": ">=20.11"

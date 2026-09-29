@@ -10,7 +10,7 @@ Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada
 - Al acabar, cada uno **entrega** su grabación: al servidor de Foundry o a una carpeta compartida de Google Drive, MEGA o Dropbox.
 - Una herramienta de **postproducción** corrige la deriva de reloj de cada tarjeta de sonido, alinea todas las pistas al mismo 0:00, limpia el ruido (DeepFilterNet) y transcribe con Whisper sabiendo quién dijo cada cosa.
 
-El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
+📖 **[Manual de instrucciones](docs/MANUAL.md)**, paso a paso. El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
 
 ## Antes de nada: HTTPS y navegador
 
