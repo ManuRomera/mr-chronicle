@@ -2,7 +2,7 @@
 
 ## 0.1.0
 
-Primera versión.
+Primera versión pública. **En desarrollo (WIP):** probada de principio a fin en local, pendiente de una partida real larga con varios jugadores.
 
 - Grabación del micro de cada participante en su navegador (AudioWorklet + OPFS), en bruto y a 48 kHz, en trozos WAV de 60 s.
 - Grabación de la música, el ambiente y los efectos de Foundry en el cliente del máster, comprimida en Ogg Opus a 160 kbps con WebCodecs (unas 10 veces menos que WAV; los silencios casi no ocupan), más un registro de lo que suena.

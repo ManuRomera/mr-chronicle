@@ -1,5 +1,8 @@
 # MR · Chronicle
 
+> [!WARNING]
+> **En desarrollo (WIP).** Funciona de principio a fin en pruebas locales, pero todavía no se ha probado en una partida real larga con varios jugadores. Úsalo para hacer pruebas, no para una sesión que no puedas repetir. Si encuentras un fallo, abre una [issue](https://github.com/ManuRomera/mr-chronicle/issues).
+
 Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada para jugar y sin coste.
 
 - Cada participante graba **su propio micro, en su navegador**, en bruto y a 48 kHz.
@@ -8,6 +11,18 @@ Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada
 - Una herramienta de **postproducción** corrige la deriva de reloj de cada tarjeta de sonido, alinea todas las pistas al mismo 0:00, limpia el ruido (DeepFilterNet) y transcribe con Whisper sabiendo quién dijo cada cosa.
 
 El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
+
+## Instalación
+
+Solo se instala en el **servidor de Foundry** (el ordenador o el servicio donde corre). Los jugadores no instalan nada.
+
+En Foundry: **Configuración → Módulos → Instalar módulo**, y en *URL del manifiesto* pega:
+
+```
+https://github.com/ManuRomera/mr-chronicle/releases/latest/download/module.json
+```
+
+Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible con Foundry V13 (V14 sin probar todavía).
 
 ## Para jugar
 
