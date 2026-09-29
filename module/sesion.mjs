@@ -233,7 +233,7 @@ class Chronicle {
     this.entrega = { hechos: 0, total: 0 };
     try {
       const total = modo === "descargar"
-        ? await descargar({ rutaLocal: this.ruta, nombreCarpeta: `${this.sesion.id}-${game.user.name}`, progreso })
+        ? await descargar({ rutaLocal: this.ruta, sesionId: this.sesion.id, carpeta: game.user.name.replace(/[\\/:*?"<>|]/g, "-"), progreso })
         : await subir({ rutaLocal: this.ruta, sesionId: this.sesion.id, userId: game.user.id, progreso, pedirCarpeta: () => this.pedirCarpeta() });
       this.entrega = { hechos: total, total, fin: modo };
       await this.guardarManifiesto({ entregado: modo });

@@ -171,6 +171,8 @@ DESPUÉS (equipo del editor, script de línea de comandos)
 - Script en JavaScript con Node.js que orquesta esos binarios. Mismo lenguaje que el módulo y sin frameworks.
 - Uso: `mr-chronicle-post <carpeta-de-sesion>`.
 
+**Para cualquier miembro del grupo** (añadido en la 2.2): instaladores de doble clic en `herramientas/instalar/` para Windows (PowerShell), Mac (Homebrew) y Linux (binarios estáticos, sin sudo). Todo va a `~/.cache/mr-chronicle`; la herramienta busca ahí antes que en el PATH. `npm run herramientas` genera un zip con lo necesario para procesar, para repartirlo por la carpeta compartida (el repositorio es privado).
+
 ### 6.3. Procesador de campaña
 
 - **MVP:** un prompt versionado en el repositorio más `transcript.md`, que se pega en el asistente que ya se use.
@@ -355,7 +357,7 @@ Por eso la entrega aprovecha que la grabación ya está en trozos de 60 s (≈ 5
 - Si hay un proxy, debe aceptar peticiones de al menos 16 MB (en nginx, `client_max_body_size 16m`); un trozo estéreo de 60 s ocupa 11,5 MB.
 - El máster debe estar conectado durante la entrega, para crear las carpetas.
 
-**Plan B,** siempre disponible: botón **«Descargar mi pista»**, que genera un ZIP con lo mismo, para enviarlo a mano.
+**Otra vía, sin servidor: la carpeta compartida.** El botón **«Descargar»** copia la grabación a la carpeta que elija el participante, como `<sesión>/<nombre>/`. Si todo el grupo elige la carpeta compartida de Google Drive, MEGA o Dropbox que sincroniza su ordenador, las grabaciones se juntan solas y cualquiera puede procesar la sesión. Es la mejor opción con Foundry en un servidor remoto. Subir directamente a la API de Drive o MEGA desde el navegador exigiría credenciales OAuth propias (Drive) o la contraseña de la cuenta (MEGA); se descarta mientras la carpeta sincronizada baste.
 
 ## 12. Postproducción
 

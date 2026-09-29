@@ -84,9 +84,10 @@
       <p class="mrc-nota">{{entrega.hechos}} de {{entrega.total}} archivos</p>
       {{#if entrega.error}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/if}}
       {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde">¡Entregada! Ya está en el servidor.</p>{{/if}}
-      {{#if (eq entrega.fin "descargar")}}<p class="mrc-aviso verde">Guardada. Envíasela al editor.</p>{{/if}}
+      {{#if (eq entrega.fin "descargar")}}<p class="mrc-aviso verde">Guardada. Si no es una carpeta sincronizada, súbela a la carpeta compartida del grupo (arrastrándola a la web de Drive o MEGA).</p>{{/if}}
     {{else}}
-      <p class="mrc-nota">Sube tu pista al servidor de Foundry. Si se corta, vuelve a pulsar: solo sube lo que falte.</p>
+      <p class="mrc-nota"><strong>Entregar</strong> la sube al servidor de Foundry; si se corta, vuelve a pulsar y solo sube lo que falte.</p>
+      <p class="mrc-nota"><strong>Descargar</strong> la guarda en la carpeta que elijas. Si eliges la carpeta compartida del grupo en Google Drive, MEGA o Dropbox (la que se sincroniza en tu ordenador), se subirá sola y se juntará con la de los demás.</p>
     {{/if}}
     {{#unless entrega.enCurso}}
     <div class="mrc-botones">

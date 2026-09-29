@@ -21,7 +21,8 @@ Módulo de Foundry VTT (`mr-chronicle`) + herramienta de postproducción en Node
 | `module/tiempo.mjs` | Hora del servidor con `socket "time"`, muestra de menor ida y vuelta. |
 | `module/foundry-audio-tap.mjs` | Único uso de API no documentada (`game.audio.*.gainNode`). |
 | `module/entrega.mjs` | Subida trozo a trozo con `FilePicker.upload` y descarga local. |
-| `herramientas/post/` | Postproducción. `lib.mjs` son funciones puras con pruebas. |
+| `herramientas/post/` | Postproducción. `lib.mjs` son funciones puras con pruebas. Busca los programas en `~/.cache/mr-chronicle/bin` antes que en el PATH. |
+| `herramientas/instalar/` | Instaladores y lanzadores por sistema. Versiones fijadas: whisper.cpp v1.9.2 (la última con ejecutables para Windows y Linux; v1.9.3 y v1.9.4 no traen), DeepFilterNet 0.5.6. |
 
 ## Trampas ya encontradas
 
@@ -31,6 +32,7 @@ Módulo de Foundry VTT (`mr-chronicle`) + herramienta de postproducción en Node
 - El servidor solo acepta ciertas extensiones: por eso el audio va en `.wav`, y las anclas y marcadores en `.txt` (con contenido NDJSON). Los archivos que no son multimedia no se pueden sobrescribir.
 - `express-fileupload` guarda cada subida entera en RAM: nunca subir archivos grandes de una vez.
 - Foundry no tiene el helper de Handlebars `selected`.
+- Instaladores: `brew install` actualiza lo que ya está instalado, así que solo se instala lo que falte. El `.ps1` necesita BOM UTF-8 para el PowerShell 5.1 de Windows; en PowerShell, `Invoke-RestMethod` pasa la lista JSON por la tubería como un único objeto (recórrela con `foreach`). El instalador de Windows se prueba en Mac con PowerShell portátil: `USERPROFILE=<tmp> MRC_SIN_MODELO=1 MRC_SIN_COMPROBAR=1 MRC_SIN_PAUSA=1 pwsh -File instalar-windows.ps1`.
 - Pistas de Foundry en Opus (`workers/ogg.js`): el gránulo de cada página hay que fijarlo al salir el paquete del codificador, no al escribirlo (la escritura va en cola). El retardo del codificador es `PRE_SKIP` = 312; comprobado con un clic que cae en su muestra exacta.
 - El paso por MediaStream retrasa las pistas de Foundry unos 100 ms respecto a las voces.
 - Whisper pone el inicio de una frase al principio de su ventana de 30 s si antes hubo silencio. El VAD de whisper.cpp no lo arregla: junta toda la voz en un segmento. Se recortan los tiempos con `silencedetect` sobre la pista limpia (`ajustarAVoz` en `lib.mjs`).

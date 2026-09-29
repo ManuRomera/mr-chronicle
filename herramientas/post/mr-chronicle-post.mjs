@@ -3,17 +3,22 @@
  * Postproducción de MR · Chronicle.
  *
  *   node herramientas/post/mr-chronicle-post.mjs <carpeta-sesion> [opciones]
+ *   node herramientas/post/mr-chronicle-post.mjs --comprobar
  *
- * <carpeta-sesion> es lo que dejan las entregas en el servidor: Data/mr-chronicle/<sesion>/,
- * con una subcarpeta por participante.
+ * <carpeta-sesion> tiene una subcarpeta por participante: la que dejan las entregas en el
+ * servidor (Data/mr-chronicle/<sesion>/) o las descargas en una carpeta compartida.
  *
  * Opciones:
  *   --salida <dir>     Carpeta de resultados (por defecto <carpeta-sesion>/salida)
- *   --config <json>    Ajustes de campaña (ver campana.ejemplo.json)
+ *   --config <json>    Ajustes de campaña. Si no se indica, se usa campana.json de la
+ *                      carpeta de la sesión o de la de encima, si existe.
  *   --sin-ruido        No limpiar el ruido
  *   --sin-whisper      No transcribir
+ *   --comprobar        Solo comprobar que están instalados los programas y el modelo
  *
  * Necesita ffmpeg; para limpiar, deep-filter (DeepFilterNet); para transcribir, whisper-cli.
+ * Los busca primero en ~/.cache/mr-chronicle/bin (donde los dejan los instaladores) y luego
+ * en el PATH.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -31,35 +36,66 @@ const { values: op, positionals } = parseArgs({
     salida: { type: "string" },
     config: { type: "string" },
     "sin-ruido": { type: "boolean", default: false },
-    "sin-whisper": { type: "boolean", default: false }
+    "sin-whisper": { type: "boolean", default: false },
+    comprobar: { type: "boolean", default: false }
   }
 });
+
+const CASA = path.join(os.homedir(), ".cache", "mr-chronicle");
+const BIN = path.join(CASA, "bin");
+const casa = r => r?.replace(/^~(?=[\\/]|$)/, os.homedir());
+
+/** Ruta del programa: el de los instaladores si existe; si no, el del PATH. */
+function programa(nombre) {
+  const propio = path.join(BIN, process.platform === "win32" ? `${nombre}.exe` : nombre);
+  return fs.existsSync(propio) ? propio : nombre;
+}
+// Funciona en Mac, Linux y Windows: si el programa no existe, spawnSync da ENOENT.
+const hay = nombre => !spawnSync(programa(nombre), ["-h"], { stdio: "ignore" }).error;
+
+function buscarConfig(sesion) {
+  if (op.config) return op.config;
+  return [path.join(sesion, "campana.json"), path.join(path.dirname(sesion), "campana.json")].find(f => fs.existsSync(f));
+}
+
+if (op.comprobar) {
+  const modelo = casa(process.env.MR_CHRONICLE_MODELO ?? path.join(CASA, "ggml-large-v3-turbo.bin"));
+  const filas = [
+    ["ffmpeg", hay("ffmpeg"), "imprescindible"],
+    ["deep-filter (DeepFilterNet)", hay("deep-filter"), "para limpiar el ruido"],
+    ["whisper-cli (whisper.cpp)", hay("whisper-cli"), "para transcribir"],
+    [`modelo ${path.basename(modelo)}`, fs.existsSync(modelo), "para transcribir"]
+  ];
+  for (const [que, ok, para] of filas) console.log(`${ok ? "✔" : "✖"} ${que}${ok ? "" : ` — falta (${para})`}`);
+  process.exit(filas.every(f => f[1]) ? 0 : 1);
+}
+
 if (!positionals[0]) {
-  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--sin-ruido] [--sin-whisper]");
+  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--sin-ruido] [--sin-whisper]\n       mr-chronicle-post --comprobar");
   process.exit(1);
 }
 
 const SESION = path.resolve(positionals[0]);
 const SALIDA = path.resolve(op.salida ?? path.join(SESION, "salida"));
 const TMP = path.join(SALIDA, ".tmp");
-const config = op.config ? JSON.parse(fs.readFileSync(op.config, "utf8")) : {};
-const casa = r => r?.replace(/^~(?=\/|$)/, os.homedir());
-const MODELO = casa(config.modelo ?? process.env.MR_CHRONICLE_MODELO ?? "~/.cache/mr-chronicle/ggml-large-v3-turbo.bin");
+const rutaConfig = buscarConfig(SESION);
+const config = rutaConfig ? JSON.parse(fs.readFileSync(rutaConfig, "utf8")) : {};
+if (rutaConfig) console.log(`Configuración: ${rutaConfig}`);
+const MODELO = casa(config.modelo ?? process.env.MR_CHRONICLE_MODELO ?? path.join(CASA, "ggml-large-v3-turbo.bin"));
 if (config.vad) config.vad = casa(config.vad);
 const avisos = [];
 const aviso = t => { avisos.push(t); console.warn(`⚠ ${t}`); };
 const paso = t => console.log(`\n▸ ${t}`);
 
-const hay = bin => { try { execFileSync("which", [bin], { stdio: "ignore" }); return true; } catch { return false; } };
-const ejecutar = (bin, args) => execFileSync(bin, args, { stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 26 });
+const ejecutar = (bin, args) => execFileSync(programa(bin), args, { stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 26 });
 function detectarSilencios(archivo) {
   // silencedetect informa por stderr.
-  const r = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", archivo, "-af", `silencedetect=noise=${config.umbralSilencioDb ?? -40}dB:d=0.5`, "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  const r = spawnSync(programa("ffmpeg"), ["-hide_banner", "-nostats", "-i", archivo, "-af", `silencedetect=noise=${config.umbralSilencioDb ?? -40}dB:d=0.5`, "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
   return r.stderr;
 }
-const slug = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const slug = t => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-if (!hay("ffmpeg")) { console.error("Falta ffmpeg (brew install ffmpeg)."); process.exit(1); }
+if (!hay("ffmpeg")) { console.error("Falta ffmpeg. Ejecuta el instalador de herramientas/instalar/."); process.exit(1); }
 fs.mkdirSync(path.join(SALIDA, "stems"), { recursive: true });
 fs.mkdirSync(TMP, { recursive: true });
 
@@ -199,7 +235,7 @@ for (const pista of pistas.values()) {
 const voces = [...pistas.values()].filter(p => p.tipo === "voz");
 if (!op["sin-ruido"]) {
   paso("Limpiando ruido (DeepFilterNet)");
-  if (!hay("deep-filter")) aviso("No está deep-filter (DeepFilterNet). Las voces se quedan sin limpiar. Instálalo o usa --sin-ruido.");
+  if (!hay("deep-filter")) aviso("No está deep-filter (DeepFilterNet). Las voces se quedan sin limpiar. Ejecuta el instalador o usa --sin-ruido.");
   else {
     for (const v of voces) {
       const destino = path.join(TMP, "limpio");
@@ -217,7 +253,7 @@ if (!op["sin-ruido"]) {
 let segmentos = [];
 if (!op["sin-whisper"]) {
   paso("Transcribiendo (whisper.cpp)");
-  if (!hay("whisper-cli")) aviso("No está whisper-cli (brew install whisper-cpp). Sin transcripción.");
+  if (!hay("whisper-cli")) aviso("No está whisper-cli (whisper.cpp). Sin transcripción: ejecuta el instalador.");
   else if (!fs.existsSync(MODELO)) aviso(`No encuentro el modelo de Whisper en ${MODELO}. Sin transcripción.`);
   else {
     const prompt = (config.diccionario ?? []).join(", ");

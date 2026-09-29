@@ -66,10 +66,16 @@ export async function subir({ rutaLocal, sesionId, userId, pedirCarpeta, progres
   return archivos.length;
 }
 
-/** Plan B: copia la sesión a una carpeta que elija el participante. */
-export async function descargar({ rutaLocal, nombreCarpeta, progreso }) {
-  const elegida = await window.showDirectoryPicker({ mode: "readwrite" });
-  const dir = await elegida.getDirectoryHandle(nombreCarpeta, { create: true });
+/**
+ * Copia la grabación a una carpeta que elija el participante, como `<sesion>/<nombre>/`.
+ * Si todos eligen la misma carpeta compartida de Google Drive, MEGA o Dropbox (la que su
+ * programa de sincronización tiene en el ordenador), las grabaciones se juntan solas y
+ * cualquiera del grupo puede procesar la sesión.
+ */
+export async function descargar({ rutaLocal, sesionId, carpeta, progreso }) {
+  const elegida = await window.showDirectoryPicker({ id: "mr-chronicle", mode: "readwrite" });
+  const sesion = elegida.name === sesionId ? elegida : await elegida.getDirectoryHandle(sesionId, { create: true });
+  const dir = await sesion.getDirectoryHandle(carpeta, { create: true });
   const archivos = await listar(rutaLocal);
   let hechos = 0;
   for (const { nombre, archivo } of archivos) {

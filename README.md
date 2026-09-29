@@ -4,7 +4,7 @@ Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada
 
 - Cada participante graba **su propio micro, en su navegador**, en bruto y a 48 kHz.
 - El máster graba además la **música, el ambiente y los efectos** de Foundry, cada uno en su pista.
-- Al acabar, cada uno **entrega** su grabación al servidor de Foundry con un botón.
+- Al acabar, cada uno **entrega** su grabación: al servidor de Foundry o a una carpeta compartida de Google Drive, MEGA o Dropbox.
 - Una herramienta de **postproducción** corrige la deriva de reloj de cada tarjeta de sonido, alinea todas las pistas al mismo 0:00, limpia el ruido (DeepFilterNet) y transcribe con Whisper sabiendo quién dijo cada cosa.
 
 El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
@@ -25,7 +25,9 @@ El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chroni
    - **★ Marcar momento** (o `Ctrl+Shift+M`) deja una marca para la edición.
    - **✂ Cortar esto** avisa de algo que no debe publicarse.
    - **Pausar mi micro** graba silencio mientras dure.
-5. El máster pulsa **Finalizar**. Cada uno pulsa **Entregar**. Si se corta, se vuelve a pulsar: solo sube lo que falte.
+5. El máster pulsa **Finalizar**. Cada uno entrega su grabación de una de estas dos formas:
+   - **Entregar:** la sube al servidor de Foundry. Si se corta, se vuelve a pulsar y solo sube lo que falte.
+   - **Descargar:** la guarda en la carpeta que elija. Si todos eligen la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox (la que sincroniza su ordenador), las grabaciones se juntan solas en `<sesión>/<nombre>/`, y cualquiera del grupo puede procesarlas.
 
 Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Si el micro se desconecta o deja de llegar sonido durante 30 s, avisa en pantalla (y el máster lo ve en la lista de la mesa).
 
@@ -37,29 +39,43 @@ Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. A
 
 Las entregas quedan en `Data/mr-chronicle/<sesión>/<usuario>/`.
 
+### Dónde está Foundry: da igual
+
+La grabación la hace el navegador de cada participante, así que funciona igual con Foundry en tu ordenador, en el Windows de otro máster o en un servidor (Oracle, Forge, etc.). Lo que cambia es dónde acaban las entregas con **Entregar**:
+
+- **Foundry en el ordenador de un máster** (Windows: `%LOCALAPPDATA%\FoundryVTT\Data\mr-chronicle\`). Ese ordenador hace de servidor y además graba: en un portátil justo puede notarse.
+- **Foundry en un servidor Linux** (por ejemplo, la capa gratuita de Oracle):
+  - **Espacio:** unos 8 GB por sesión de 4 horas con 4 jugadores. Bájate las sesiones y bórralas del servidor.
+  - **Proxy:** si va detrás de nginx, pon `client_max_body_size 16m;`, porque por defecto rechaza la entrega. Caddy no tiene límite.
+  - **Tiempo de subida:** 1,4 GB con 10 Mbps de subida son unos 20 minutos por jugador. Con la carpeta compartida, en cambio, cada uno sube a Drive o MEGA a su ritmo.
+  - **Para bajarlo:** `rsync -av usuario@servidor:/ruta/a/Data/mr-chronicle/ ./mr-chronicle/`
+  - No proceses en el servidor: Whisper sin tarjeta gráfica tardaría horas.
+
 ## Postproducción
 
-**Requisitos (Mac):**
+Cualquiera del grupo puede procesar una sesión, en **Windows, Mac o Linux**, con instaladores de doble clic. La guía completa para quien procese está en [herramientas/LEEME.md](herramientas/LEEME.md).
+
+Como el repositorio es privado, para tus amigos hay un paquete con solo lo necesario:
 
 ```bash
-brew install ffmpeg whisper-cpp
+npm run herramientas
 ```
 
-- **DeepFilterNet:** descarga el ejecutable `deep-filter` para tu sistema desde https://github.com/Rikorose/DeepFilterNet/releases y ponlo en el PATH.
-- **Modelo de Whisper:** `ggml-large-v3-turbo.bin` en `~/.cache/mr-chronicle/` (o indica otra ruta en `campana.json` o con la variable `MR_CHRONICLE_MODELO`).
+Genera `dist/MR-Chronicle-herramientas.zip` (instaladores, herramienta, guía y prompt de crónica). Déjalo en la carpeta compartida del grupo.
 
-**Uso:**
+**Resumen:**
+1. `herramientas/instalar/`: *Instalar en Windows.bat*, *instalar-mac.command* o *instalar-linux.sh* (una vez). Instala ffmpeg, whisper.cpp, DeepFilterNet, Node si falta y el modelo de Whisper en `~/.cache/mr-chronicle`, sin tocar el sistema.
+2. *Procesar sesion (Windows).bat* o *procesar.command* (Mac y Linux), y arrastrar la carpeta de la sesión.
+
+En la línea de órdenes:
 
 ```bash
-node herramientas/post/mr-chronicle-post.mjs /ruta/a/Data/mr-chronicle/<sesión> --config campana.json
+node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> [--salida dir] [--config campana.json] [--sin-ruido] [--sin-whisper]
 ```
 
-Opciones:
-- `--salida <dir>`
-- `--sin-ruido`
-- `--sin-whisper`
+`--comprobar` dice qué falta por instalar.
 
-Copia [herramientas/post/campana.ejemplo.json](herramientas/post/campana.ejemplo.json) para configurar:
+Si en la carpeta de la sesión, o en la de encima, hay un `campana.json`, se usa solo. Copia [herramientas/post/campana.ejemplo.json](herramientas/post/campana.ejemplo.json):
 
 | Campo | Para qué |
 |---|---|
@@ -77,7 +93,7 @@ No actives `vad`: el detector de voz de whisper.cpp junta toda la voz de una per
 |---|---|
 | `stems/voz-<nombre>.wav` | Voz limpia. Todas las pistas empiezan en 0:00 y duran lo mismo. |
 | `stems/voz-<nombre>.bruta.wav` | Voz original, alineada. |
-| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry (grabado en Opus a 160 kbps; llegan unos 0,1 s tarde respecto a las voces, sin importancia para música de fondo). |
+| `stems/foundry-musica.wav`, `foundry-ambiente.wav`, `foundry-efectos.wav` | Lo que sonó en Foundry (grabado en Opus a 160 kbps; llega unos 0,1 s tarde respecto a las voces, sin importancia para música de fondo). |
 | `transcript.md`, `.json`, `.srt` | Transcripción con hablante y hora. |
 | `marcadores.txt` | Marcadores, para importar en Audacity (Archivo → Importar → Etiquetas). |
 | `musica.json` | Qué sonó y cuándo. |
