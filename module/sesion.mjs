@@ -17,6 +17,12 @@ export const ID = "mr-chronicle";
 const SOCKET = `module.${ID}`;
 const ESTADO_CADA_MS = 3000;
 
+/** 3725 → «1:02:05». */
+export const reloj = segundos => {
+  const s = Math.floor(segundos);
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
 class Chronicle {
   pistas = [];          // pistas grabando en este cliente
   micro = null;         // pista del micro, preparada al aceptar (sirve de medidor)
@@ -76,6 +82,7 @@ class Chronicle {
     game.socket.on(SOCKET, msg => this.alRecibir(msg));
     this.indicador();
     setInterval(() => this.emitirEstado(), ESTADO_CADA_MS);
+    setInterval(() => { if (this.grabando) this.indicador(); }, 1000); // el reloj avanza a la vista
     await sincronizar();
     this.emitir({ tipo: "hola" });
     await this.alCambiarSesion(true);
@@ -125,6 +132,9 @@ class Chronicle {
       if (alCargar) {
         ui.notifications.info("MR · Chronicle: tu grabación seguirá en cuanto hagas clic en la mesa.");
         await game.audio.unlock;
+        // Mientras se esperaba el clic, la sesión pudo cambiar o terminar.
+        const ahoraSesion = this.sesion;
+        if (ahoraSesion?.id !== s.id || !["grabando", "pausada"].includes(ahoraSesion.fase)) return;
       }
       await this.empezarTramo();
     }
@@ -188,28 +198,45 @@ class Chronicle {
   }
 
   async empezarTramo() {
-    if (this.ocupado || this.problemaNavegador) return;
+    // Nunca una grabación encima de otra: la anterior quedaría grabando sin control.
+    if (this.ocupado || this.grabando || this.problemaNavegador) return;
     this.ocupado = true;
     try {
       const tramo = (this.manifiesto?.tramos ?? 0) + 1;
       if (!this.micro) await this.probarMicro(localStorage.getItem(`${ID}.micro`) || undefined);
       if (!this.micro) return;
-      const pistas = [this.micro];
-      if (game.user.isGM && this.sesion.grabarFoundry) pistas.push(...await pistasFoundry());
 
-      const info = {};
-      for (const p of pistas) {
+      const iniciar = async p => {
         const prefijo = `${p.tipo}-${tramo}`;
         await p.iniciar(this.ruta, prefijo);
         p.alCambiar = () => this.refrescar();
-        info[prefijo] = { tipo: p.tipo, sampleRate: p.ctx.sampleRate, canales: p.canales, ...p.info };
-      }
-      this.pistas = pistas;
+        this.pistas.push(p);
+        await this.guardarManifiesto({
+          tramos: tramo, estado: "grabando",
+          pistas: { ...this.manifiesto?.pistas, [prefijo]: { tipo: p.tipo, sampleRate: p.ctx.sampleRate, canales: p.canales, ...p.info } }
+        });
+        this.aplicarPausa();
+      };
+
+      // La voz, siempre ya.
+      this.pistas = [];
+      await iniciar(this.micro);
+
+      // Las pistas de Foundry, cuando su audio esté disponible: Foundry lo desbloquea con el
+      // primer clic en la página, y la voz no puede quedarse esperando a eso.
       if (game.user.isGM && this.sesion.grabarFoundry) {
-        this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), ...e }));
+        this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), ...e }).catch(() => {}));
+        const foundry = async () => {
+          if (!this.grabando) return; // se paró mientras tanto
+          try { for (const p of await pistasFoundry()) await iniciar(p); }
+          catch (error) { this.error = `No se pudo grabar la música de Foundry: ${error.message}`; }
+          this.refrescar();
+        };
+        if (game.audio.locked) {
+          ui.notifications.info("MR · Chronicle: tu voz ya se graba. La música de Foundry empezará a grabarse en cuanto hagas clic en la mesa.");
+          game.audio.unlock.then(foundry);
+        } else await foundry();
       }
-      await this.guardarManifiesto({ tramos: tramo, pistas: { ...this.manifiesto?.pistas, ...info }, estado: "grabando" });
-      this.aplicarPausa();
     } catch (error) {
       this.error = `No se pudo empezar a grabar: ${error.message}`;
       console.error(error);
@@ -340,7 +367,9 @@ class Chronicle {
       nivel: this.micro?.nivel ?? 0,
       grabando: this.grabando,
       pausa: this.pausaPropia,
-      minutos: voz?.minutos ?? 0,
+      segundos: voz?.segundos ?? 0,
+      // Lo escrito de verdad en el disco: la prueba de que se está grabando.
+      guardadoMB: Math.round(this.pistas.reduce((t, p) => t + (p.bytes ?? 0), 0) / 1e6),
       pistas: this.pistas.length,
       entregado: this.manifiesto?.entregado ?? null,
       error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0]
@@ -388,11 +417,10 @@ class Chronicle {
     // La sesión graba pero este equipo no (aún no aceptó, o espera un clic tras recargar).
     if (!this.grabando && ["grabando", "pausada"].includes(estado)) estado = acepto ? "espera" : "ajena";
     el.dataset.estado = estado;
-    const minutos = this.miEstado.minutos;
-    const reloj = `${Math.floor(minutos / 60)}:${String(Math.floor(minutos % 60)).padStart(2, "0")}`;
+    const tiempo = reloj(this.miEstado.segundos);
     el.textContent = {
-      grabando: `● Grabando · ${reloj}`,
-      pausa: `❚❚ En pausa · ${reloj}`,
+      grabando: `● Grabando · ${tiempo}`,
+      pausa: `❚❚ En pausa · ${tiempo}`,
       preparada: "MR · Chronicle · preparada",
       finalizada: "MR · Chronicle · entregar",
       espera: "MR · Chronicle · haz clic en la mesa para seguir grabando",

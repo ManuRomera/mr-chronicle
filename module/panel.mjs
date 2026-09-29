@@ -4,7 +4,7 @@
  * el resto (para no cerrar desplegables ni borrar lo que se está escribiendo).
  */
 import { ConMemoria } from "./memoria.mjs";
-import { chronicle, ID } from "./sesion.mjs";
+import { chronicle, ID, reloj } from "./sesion.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const RUTA = `modules/${ID}/templates`;
@@ -26,7 +26,6 @@ const PROBLEMAS = {
 const sinConsentimiento = () =>
   game.users.filter(u => u.active && !chronicle.estados.get(u.id)?.acepta);
 
-const minutosATexto = m => `${Math.floor(m / 60)} h ${String(Math.floor(m % 60)).padStart(2, "0")} min`;
 
 export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2)) {
   static MEMORIA = "panel";
@@ -86,7 +85,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       yo,
       manifiesto: chronicle.manifiesto,
       micros: micros.map((d, i) => ({ id: d.deviceId, nombre: d.label || `Micrófono ${i + 1}`, elegido: d.deviceId === elegido })),
-      minutos: minutosATexto(yo.minutos),
+      reloj: reloj(yo.segundos),
       fase: s?.fase,
       grabable: ["preparada", "grabando", "pausada"].includes(s?.fase),
       finalizada: s?.fase === "finalizada",
@@ -109,7 +108,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       let clase = "gris", texto = "Sin respuesta";
       if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
       else if (e?.error) [clase, texto] = ["rojo", e.error];
-      else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${minutosATexto(e.minutos)}`] : ["verde", `Grabando · ${minutosATexto(e.minutos)}`];
+      else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${reloj(e.segundos ?? 0)}`] : ["verde", `Grabando · ${reloj(e.segundos ?? 0)} · ${e.guardadoMB ?? 0} MB`];
       else if (e?.entregado) [clase, texto] = ["verde", "Entregado"];
       else if (e?.acepta && contexto.finalizada) [clase, texto] = ["ambar", "Falta entregar"];
       else if (e?.acepta) [clase, texto] = e.micro ? ["verde", "Listo"] : ["ambar", "Aceptó · sin micro"];
@@ -132,11 +131,19 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     await super._onRender(contexto, opciones);
     clearInterval(this.medidor);
     const barra = this.element.querySelector(".mrc-nivel > span");
-    if (barra) {
+    const tiempo = this.element.querySelector("[data-mrc-reloj]");
+    const guardado = this.element.querySelector("[data-mrc-guardado]");
+    if (barra || tiempo) {
       this.medidor = setInterval(() => {
         const nivel = chronicle.micro?.nivel ?? 0;
-        barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
-        barra.dataset.saturado = nivel > 0.98;
+        if (barra) {
+          barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
+          barra.dataset.saturado = nivel > 0.98;
+        }
+        // Reloj y MB guardados en vivo, sin repintar el panel.
+        const yo = chronicle.miEstado;
+        if (tiempo) tiempo.textContent = reloj(yo.segundos);
+        if (guardado) guardado.textContent = `${yo.guardadoMB} MB guardados en este ordenador`;
       }, 60);
     }
   }

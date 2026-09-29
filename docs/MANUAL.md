@@ -182,8 +182,8 @@ Arriba, en el centro de Foundry. Siempre visible; al hacer clic se abre el panel
 | Muestra | Significa |
 |---|---|
 | `MR · Chronicle · preparada` | Hay sesión; falta aceptar o que el máster inicie. |
-| `● Grabando · 1:23` (rojo) | **Te está grabando.** |
-| `❚❚ En pausa · 1:23` | En pausa: se graba silencio. |
+| `● Grabando · 0:01:23` (rojo) | **Te está grabando.** El reloj (horas:minutos:segundos) avanza cada segundo. |
+| `❚❚ En pausa · 0:01:23` | En pausa: se graba silencio. |
 | `… haz clic en la mesa para seguir grabando` | Has recargado; la grabación sigue al primer clic. |
 | `… sesión en marcha (no te grabas)` | Se está grabando, pero tú no has aceptado. |
 | `MR · Chronicle · entregar` | Ha terminado: toca entregar. |
@@ -215,7 +215,9 @@ Arriba, en el centro de Foundry. Siempre visible; al hacer clic se abre el panel
 | **Retirar mi consentimiento…** | Deja de grabarte en ese momento. |
 | **❚❚ Pausar a todos** (máster) | Pausa todas las grabaciones. |
 
-La lista **En la mesa** muestra el estado de cada uno. El verde es que todo va bien; el rojo lleva la explicación del problema.
+En el panel, bajo el reloj, **«N MB guardados en este ordenador»** tiene que ir creciendo (unos 5,8 MB por minuto de voz): es la prueba de que la grabación se está escribiendo de verdad.
+
+La lista **En la mesa** muestra el estado de cada uno, con su tiempo y sus MB. El verde es que todo va bien; el rojo lleva la explicación del problema.
 
 **6. El máster finaliza.** Pulsa **■ Finalizar** y confirma. Se para la grabación de todos.
 

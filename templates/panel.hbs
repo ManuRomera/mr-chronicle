@@ -47,7 +47,8 @@
   <section class="mrc-bloque">
     <h3>Tu grabación</h3>
     {{#if yo.grabando}}
-      <p class="mrc-grande">{{#if yo.pausa}}❚❚ En pausa{{else}}<span class="mrc-punto"></span> Grabando{{/if}} · {{minutos}}</p>
+      <p class="mrc-grande">{{#if yo.pausa}}❚❚ En pausa{{else}}<span class="mrc-punto"></span> Grabando{{/if}} · <span data-mrc-reloj>{{reloj}}</span></p>
+      <p class="mrc-nota" data-mrc-guardado>{{yo.guardadoMB}} MB guardados en este ordenador</p>
       <div class="mrc-nivel"><span></span></div>
       <label class="mrc-campo">Marcador (opcional)
         <input type="text" name="marcador" placeholder="Momento para el tráiler">

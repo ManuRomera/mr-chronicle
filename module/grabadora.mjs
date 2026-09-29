@@ -67,7 +67,7 @@ export class Pista {
         if (data.aviso) ui.notifications.warn(`MR · Chronicle: ${data.aviso}`);
         if (data.error) { this.errores.push(data.error); reject(new Error(data.error)); this.alCambiar(); }
         if (data.cerrado) this.cerrado?.(data);
-        if (data.escrito) this.ultimaEscritura = performance.now();
+        if (data.escrito) { this.ultimaEscritura = performance.now(); this.bytes = data.escrito; }
       };
     });
     this.worker.postMessage({
@@ -139,8 +139,9 @@ export class Pista {
     }).catch(() => {}); // el fallo ya se muestra en pantalla
   }
 
-  get minutos() {
-    return this.grabando ? (this.meta?.frame ?? 0) / this.ctx.sampleRate / 60 : 0;
+  /** Segundos grabados (por muestras: es lo que de verdad hay en el archivo). */
+  get segundos() {
+    return this.grabando ? (this.meta?.frame ?? 0) / this.ctx.sampleRate : 0;
   }
 
   /** Cierra la pista: última ancla, vacía lo pendiente y espera a que el Worker cierre el trozo. */

@@ -1,5 +1,12 @@
 # Cambios
 
+## 0.1.3
+
+- **Reloj de grabación con segundos** (h:mm:ss) en el indicador, el panel y la mesa. Antes solo contaba minutos enteros y parecía parado.
+- **MB guardados en este ordenador**, en el panel y en la mesa: la prueba de que se está escribiendo de verdad.
+- **La voz empieza a grabarse siempre al momento.** Las pistas de Foundry se suman cuando su audio se desbloquea (primer clic en la página), sin retrasar la voz.
+- **Corregida una grabación duplicada:** al recargar durante una sesión, si la sesión cambiaba antes del primer clic, se arrancaba un segundo tramo y el primero seguía grabando sin control.
+
 ## 0.1.2
 
 - **Compartir Foundry con HTTPS, gratis:** scripts de doble clic (Mac, Windows y Linux) que abren un túnel de Cloudflare y dan una dirección `https://…trycloudflare.com`. Resuelve el caso del máster con Foundry en casa: sin HTTPS, los jugadores no pueden grabar. Probado de extremo a extremo: grabación y entrega de una jugadora por el túnel, sincronía de 13 ms o menos con el máster en local.

@@ -2,7 +2,7 @@
   "id": "mr-chronicle",
   "title": "MR · Chronicle",
   "description": "⚠️ EN DESARROLLO (WIP): pruébalo antes de usarlo en una partida importante. Graba la partida como podcast multipista: cada participante graba su propio micro en su navegador, el máster graba además la música y los efectos de Foundry, y una herramienta de postproducción alinea las pistas, limpia el ruido y transcribe con Whisper. Sin instalar nada para jugar y sin coste.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "compatibility": {
     "minimum": "13",
     "verified": "13.351"

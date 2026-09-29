@@ -80,17 +80,20 @@ async function abrir(desde = 0) {
   }
 }
 
+let totalBytes = 0; // todo lo escrito en esta pista, para mostrarlo en el panel
+
 function escribirBytes(bytes) {
   const desplazamiento = cfg.formato === "wav" ? 44 : 0;
   trozo.handle.write(bytes, { at: desplazamiento + trozo.bytes });
   trozo.bytes += bytes.length;
+  totalBytes += bytes.length;
 }
 
 // Señal de vida para el hilo principal: si deja de llegar, la grabación no se está guardando.
 let ultimoAviso = 0;
 function informar() {
   const t = Date.now();
-  if (t - ultimoAviso > 5000) { ultimoAviso = t; self.postMessage({ escrito: true }); }
+  if (t - ultimoAviso > 2000) { ultimoAviso = t; self.postMessage({ escrito: totalBytes }); }
 }
 
 function cerrar() {
