@@ -14,13 +14,30 @@ El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chroni
 
 ## Antes de nada: HTTPS y navegador
 
-El navegador **solo permite el micro y guardar la grabación en páginas seguras**. Si en la barra de direcciones pone «No es seguro» (por ejemplo, `http://192.168.1.20:30000` o `http://tu-ip:30000`), no se podrá grabar y el panel lo avisa.
+El navegador **solo permite el micro y guardar la grabación en páginas seguras**: las que van por `https://` o por `localhost`. Si en la barra de direcciones pone «No es seguro» (por ejemplo, `http://192.168.1.20:30000` o `http://tu-ip:30000`), no se puede grabar, y el panel lo avisa y dice qué hacer. Es una regla de los navegadores; ningún módulo puede saltársela.
 
-- **Para jugar por Internet**, Foundry tiene que ir por `https://`. Lo más sencillo es un dominio (vale uno gratuito, como DuckDNS) y [Caddy](https://caddyserver.com) delante de Foundry, que saca el certificado solo. También se puede configurar un certificado en las opciones de Foundry.
-- **En el ordenador que hace de servidor**, `http://localhost:30000` sí cuenta como seguro.
-- **Para una prueba rápida en tu red**, sin HTTPS: en Chrome, entra en `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, añade la dirección de Foundry y reinicia Chrome.
+**Navegador:** Chrome o Edge. **No uses la app de escritorio de Foundry para grabar:** no guarda la grabación y el panel lo bloquea.
 
-**Navegador:** Chrome o Edge. **No uses la app de escritorio de Foundry para grabar:** no guarda la grabación y el panel lo bloquea. Si eres el máster y Foundry corre en tu ordenador, abre la partida en Chrome con `http://localhost:30000`.
+### Foundry en casa: HTTPS gratis con un túnel
+
+Si el máster tiene Foundry en su ordenador y los demás se conectan desde sus casas, lo más sencillo es un **túnel de Cloudflare**. Es gratis, no necesita dominio ni abrir puertos del router, y los jugadores no instalan nada:
+
+1. Arranca Foundry y lanza el mundo.
+2. Abre **Compartir Foundry**, que está en `herramientas/servidor/` (y en el zip de herramientas):
+   - **Mac:** doble clic en `compartir-foundry.command`.
+   - **Windows:** doble clic en `Compartir Foundry (Windows).bat`.
+   - **Linux:** `bash compartir-foundry.command`.
+3. Te pregunta el puerto (30000 por defecto) y muestra una dirección `https://algo.trycloudflare.com`. **Pásasela a los jugadores y úsala tú también.** Deja la ventana abierta durante la partida.
+
+Ten en cuenta:
+- La dirección cambia cada vez que abres el túnel.
+- Cualquiera con la dirección llega a tu Foundry: **pon contraseña a los usuarios**, sobre todo al máster.
+- También funciona en un servidor Linux, como la capa gratuita de Oracle: es más sencillo que montar un dominio con Caddy.
+
+**Otras opciones:**
+- **En el ordenador que tiene Foundry:** abrir `http://localhost:30000` ya cuenta como seguro.
+- **Dominio propio:** con uno gratuito (DuckDNS, por ejemplo) y [Caddy](https://caddyserver.com) delante de Foundry, que saca el certificado solo.
+- **Solo para una prueba rápida en tu red:** en Chrome, `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, añade la dirección de Foundry y reinicia Chrome.
 
 ## Instalación
 

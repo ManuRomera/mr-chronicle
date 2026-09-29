@@ -77,6 +77,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       faseTexto: FASES[s?.fase] ?? "",
       grabarFoundry: s?.grabarFoundry ?? true,
       problema: chronicle.problemaNavegador?.texto ?? null,
+      sinHttps: chronicle.problemaNavegador?.codigo === "https" ? chronicle.problemaNavegador : null,
       consentimientos: (() => {
         const activos = game.users.filter(u => u.active).length;
         const faltan = sinConsentimiento().length;

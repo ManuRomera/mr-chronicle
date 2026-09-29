@@ -1,5 +1,10 @@
 # Cambios
 
+## 0.1.2
+
+- **Compartir Foundry con HTTPS, gratis:** scripts de doble clic (Mac, Windows y Linux) que abren un túnel de Cloudflare y dan una dirección `https://…trycloudflare.com`. Resuelve el caso del máster con Foundry en casa: sin HTTPS, los jugadores no pueden grabar. Probado de extremo a extremo: grabación y entrega de una jugadora por el túnel, sincronía de 13 ms o menos con el máster en local.
+- **Aviso del panel sin HTTPS más útil:** enlace directo a `localhost` si Foundry está en ese ordenador, y explicación del túnel.
+
 ## 0.1.1
 
 Correcciones tras la primera prueba real. **Sigue en desarrollo (WIP).**

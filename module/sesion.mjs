@@ -35,7 +35,8 @@ class Chronicle {
     if (!window.isSecureContext) {
       return {
         codigo: "https",
-        texto: `Foundry está abierto sin HTTPS (${location.origin}). El navegador solo permite el micro y guardar la grabación en páginas seguras. El servidor de Foundry tiene que usar https://, o, en el propio ordenador que hace de servidor, abrir http://localhost.`
+        texto: `Foundry está abierto sin HTTPS (${location.origin}) y el navegador solo deja usar el micro y guardar la grabación en páginas seguras.`,
+        local: `http://localhost:${location.port || 80}${location.pathname}`
       };
     }
     // La app de escritorio de Foundry (Electron) no guardó la grabación en las pruebas y no

@@ -1,6 +1,12 @@
 <div class="mrc-principal">
   {{#if problema}}
-  <p class="mrc-aviso rojo">{{problema}}</p>
+  <div class="mrc-aviso rojo">
+    <p>{{problema}}</p>
+    {{#if sinHttps}}
+    <p><strong>¿Foundry está en este mismo ordenador?</strong> Ábrelo por <a href="{{sinHttps.local}}">{{sinHttps.local}}</a> y podrás grabar.</p>
+    <p><strong>¿Jugáis desde casas distintas?</strong> Quien tiene Foundry abre <em>Compartir Foundry</em> (en las herramientas de MR · Chronicle): da gratis una dirección <code>https://…trycloudflare.com</code> para todos. <a href="https://github.com/ManuRomera/mr-chronicle#foundry-en-casa-https-gratis-con-un-túnel" target="_blank" rel="noopener">Cómo se hace</a>.</p>
+    {{/if}}
+  </div>
   {{/if}}
 
   {{! ─── Sesión ─── }}

@@ -108,3 +108,6 @@
 @keyframes mrc-latido { 50% { opacity: .35; } }
 #mr-chronicle-indicador[data-estado="espera"] { background: #6b4c10; border-color: #f2b33d; color: #fff; }
 .mr-chronicle .mrc-botones button:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.6); }
+.mr-chronicle .mrc-aviso p { margin: 0 0 6px; }
+.mr-chronicle .mrc-aviso p:last-child { margin: 0; }
+.mr-chronicle .mrc-aviso a { color: inherit; text-decoration: underline; }

@@ -20,6 +20,10 @@ Al terminar, el instalador comprueba que está todo y muestra ✔ o ✖ en cada 
 
 **Velocidad:** en un Mac con chip Apple o en un Windows con tarjeta NVIDIA (el instalador lo detecta y usa la versión rápida), una sesión de 4 horas tarda unos 15 minutos por jugador. En un ordenador sin tarjeta gráfica puede tardar varias horas: déjalo trabajando.
 
+## Para el máster con Foundry en casa
+
+Para poder grabar, los jugadores necesitan entrar por `https://`. En `servidor/` está **Compartir Foundry** (`compartir-foundry.command` en Mac y Linux, `Compartir Foundry (Windows).bat` en Windows): abre un túnel gratuito de Cloudflare y te da una dirección `https://…trycloudflare.com` para todos. Deja la ventana abierta durante la partida y pon contraseña a los usuarios de Foundry.
+
 ## 2. Juntar las grabaciones
 
 Al acabar la partida, cada jugador pulsa en el panel de MR · Chronicle:

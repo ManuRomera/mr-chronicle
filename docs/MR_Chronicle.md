@@ -359,6 +359,16 @@ Por eso la entrega aprovecha que la grabación ya está en trozos de 60 s (≈ 5
 
 **Otra vía, sin servidor: la carpeta compartida.** El botón **«Descargar»** copia la grabación a la carpeta que elija el participante, como `<sesión>/<nombre>/`. Si todo el grupo elige la carpeta compartida de Google Drive, MEGA o Dropbox que sincroniza su ordenador, las grabaciones se juntan solas y cualquiera puede procesar la sesión. Es la mejor opción con Foundry en un servidor remoto. Subir directamente a la API de Drive o MEGA desde el navegador exigiría credenciales OAuth propias (Drive) o la contraseña de la cuenta (MEGA); se descarta mientras la carpeta sincronizada baste.
 
+### 11.1. HTTPS (añadido tras la primera prueba real)
+
+El micro, el AudioWorklet y OPFS solo existen en **contextos seguros** (`https://` o `localhost`). Un Foundry casero al que los jugadores entran por `http://ip:30000` no lo es, así que no podrían grabar. Es una regla del navegador, no del módulo.
+
+Solución elegida: un **túnel rápido de Cloudflare** (`cloudflared tunnel --url http://localhost:30000`). Es gratuito, sin cuenta ni dominio, y da una dirección `https://…trycloudflare.com`; además evita abrir puertos del router. Los scripts de `herramientas/servidor/` lo descargan y lo abren con doble clic.
+
+Se probó con una jugadora entrando por el túnel: grabó, entregó (subida a través de Cloudflare) y quedó sincronizada a 13 ms o menos del máster en local.
+
+Descartado por ahora: grabar en una ventana aparte servida por HTTPS (por ejemplo, desde GitHub Pages) y controlada desde Foundry con `postMessage`. Evitaría el túnel, pero duplica la arquitectura, y la captura de audio de Foundry seguiría necesitando contexto seguro.
+
 ## 12. Postproducción
 
 ```
