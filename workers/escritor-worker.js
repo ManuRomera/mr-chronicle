@@ -16,6 +16,7 @@ let cfg = null;      // {ruta, prefijo, sampleRate, canales, formato}
 let dir = null;
 let trozo = null;    // {handle, bytes}
 let n = 0;
+let hayCabecerasOgg = false;
 let framesPorTrozo = 0;
 
 // Opus
@@ -67,16 +68,31 @@ async function prepararOpus() {
 }
 
 async function abrir(desde = 0) {
-  n += 1;
-  const nombre = `${cfg.prefijo}-${String(n).padStart(6, "0")}.${cfg.formato === "opus" ? "ogg" : "wav"}`;
-  const archivo = await dir.getFileHandle(nombre, { create: true });
-  const handle = await archivo.createSyncAccessHandle();
-  handle.truncate(0);
+  // Nunca se escribe encima de un archivo con datos: si ya existe (no debería), se conserva y
+  // se sigue con el número siguiente. Una grabación antigua no se puede perder por un despiste.
+  let handle;
+  for (;;) {
+    n += 1;
+    const nombre = `${cfg.prefijo}-${String(n).padStart(6, "0")}.${cfg.formato === "opus" ? "ogg" : "wav"}`;
+    const archivo = await dir.getFileHandle(nombre, { create: true });
+    if ((await archivo.getFile()).size === 0) { handle = await archivo.createSyncAccessHandle(); break; }
+    self.postMessage({ aviso: `Ya existía ${nombre}: se conserva y la grabación sigue en el archivo siguiente.` });
+  }
   trozo = { handle, bytes: 0 };
-  if (cfg.formato === "wav") trozo.handle.write(cabecera(0), { at: 0 });
+  if (cfg.formato === "wav") escribirEn(cabecera(0), 0);
   else {
     inicioTrozo = desde;
-    if (n === 1) for (const p of ogg.cabeceras()) escribirBytes(p);
+    if (!hayCabecerasOgg) { for (const p of ogg.cabeceras()) escribirBytes(p); hayCabecerasOgg = true; }
+  }
+}
+
+/** Escribe todo el búfer: write() puede escribir menos de lo pedido, y 0 es que el disco no acepta más. */
+function escribirEn(bytes, at) {
+  let hecho = 0;
+  while (hecho < bytes.length) {
+    const escritos = trozo.handle.write(bytes.subarray(hecho), { at: at + hecho });
+    if (!escritos) throw new Error("el disco no acepta más datos");
+    hecho += escritos;
   }
 }
 
@@ -84,7 +100,7 @@ let totalBytes = 0; // todo lo escrito en esta pista, para mostrarlo en el panel
 
 function escribirBytes(bytes) {
   const desplazamiento = cfg.formato === "wav" ? 44 : 0;
-  trozo.handle.write(bytes, { at: desplazamiento + trozo.bytes });
+  escribirEn(bytes, desplazamiento + trozo.bytes);
   trozo.bytes += bytes.length;
   totalBytes += bytes.length;
 }
@@ -98,7 +114,7 @@ function informar() {
 
 function cerrar() {
   if (!trozo) return;
-  if (cfg.formato === "wav") trozo.handle.write(cabecera(trozo.bytes), { at: 0 });
+  if (cfg.formato === "wav") escribirEn(cabecera(trozo.bytes), 0);
   trozo.handle.flush();
   trozo.handle.close();
   trozo = null;

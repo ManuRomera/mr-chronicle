@@ -1,5 +1,44 @@
 # Cambios
 
+## 0.2.0 · Robustez
+
+Corrige los fallos de la auditoría del 30-09-2026. **Sigue en desarrollo (WIP)**, pendiente de una partida real larga.
+
+**Nunca perder ni sobrescribir**
+- **Guardar copia (.zip)**: un único archivo por participante (con ZIP64 si pasa de 4 GB), con inventario de tamaños y CRC. Se sube a la carpeta compartida y la postproducción lo lee tal cual.
+- **Grabaciones en este navegador**: la lista sigue ahí aunque se cierre la sesión.
+- El número de tramo sale también de los archivos que existen, y el escritor nunca escribe encima de un archivo con datos.
+- Identificador de sesión con sufijo único, y una sola pestaña grabando por persona.
+- Escrituras completas hasta el último byte.
+- Nombres únicos: dos «Ana» no se pisan, y solo el máster que prepara la sesión graba las pistas de Foundry.
+
+**Parar y retirar de verdad**
+- Parar corta la captura al momento; la hora del servidor se mide después y no bloquea.
+- Retirar el consentimiento cierra el micro aunque no haya llegado a grabar.
+- Un inicio pendiente no se queda grabando si mientras tanto se detiene o cambia la sesión.
+- El cierre se confirma, y si no se puede, se avisa («cierre sin confirmar»).
+- «Pausar mi micro» ya no pausa la música del máster.
+
+**Entrega verificada**
+- Cada archivo se da por entregado al servidor solo si allí tiene el mismo tamaño; reintentos con pausa creciente.
+- El estado de entrega va aparte, en `entregas.json`, que no viaja: el manifiesto no cambia después de entregarlo.
+
+**Coste durante la partida**
+- El panel ya no acumula escuchadores.
+- Los refrescos parciales no consultan micros ni disco.
+- Una sola medición de hora compartida por todas las pistas.
+- Los estados caducan: «Sin comunicación».
+
+**Postproducción**
+- Un trozo que falta se rellena con silencio y se avisa: lo siguiente no se desplaza.
+- Un reinicio del servidor se corrige ancla a ancla, también dentro de un tramo, y en marcadores y música.
+- Los tramos con menos de dos anclas o con una deriva imposible se procesan con la frecuencia nominal, con aviso.
+- Las pistas de quien no autorizó publicar van a `stems/no-publicar/`.
+- Memoria acotada al pegar el Ogg, temporal único por ejecución y ningún resto de procesados anteriores.
+- Un programa que se lanza pero falla ya no cuenta como instalado.
+
+**Pruebas:** 23 (antes 7), incluidas las reproducciones de la auditoría escritas como comportamiento correcto.
+
 ## 0.1.5
 
 - **El máster elige qué pistas de Foundry se graban** (música, ambiente, efectos, cada una por separado). Lo que no marque no se graba, no se entrega y no se procesa. Se recuerda para la próxima sesión.

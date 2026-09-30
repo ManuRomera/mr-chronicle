@@ -9,10 +9,13 @@
  * frecuencia real de la tarjeta de sonido y coloca la pista en la línea de tiempo común.
  */
 import { RAIZ, anadirLinea, escribirJSON, listar, borrar } from "./opfs.mjs";
-import { sincronizar } from "./tiempo.mjs";
+import { sincronizar, desfase } from "./tiempo.mjs";
 
 const RUTA = foundry.utils.getRoute("modules/mr-chronicle/workers");
 const INTERVALO_ANCLAS_MS = 30_000;
+const PLAZO_ARRANQUE_MS = 8000;
+const PLAZO_CIERRE_MS = 8000;
+const espera = ms => new Promise(r => setTimeout(r, ms));
 const contextosConWorklet = new WeakSet();
 
 export class Pista {
@@ -48,6 +51,10 @@ export class Pista {
     this.silencio = new GainNode(this.ctx, { gain: 0 });
     this.fuente.connect(this.nodo);
     this.nodo.connect(this.silencio).connect(this.ctx.destination);
+    // Si el navegador suspende el contexto mientras se graba, se intenta reanudar.
+    this.ctx.addEventListener?.("statechange", () => {
+      if (this.grabando && this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+    });
     this.nodo.port.onmessage = ({ data }) => {
       if ("nivel" in data) this.nivel = data.nivel;
       if ("frame" in data) this.meta = data;
@@ -63,10 +70,14 @@ export class Pista {
     this.worker = new Worker(`${RUTA}/escritor-worker.js`, { type: "module" });
     const canal = new MessageChannel();
     const listo = new Promise((resolve, reject) => {
+      const plazo = setTimeout(() => reject(new Error("el escritor no arranca")), PLAZO_ARRANQUE_MS);
+      const falla = mensaje => { clearTimeout(plazo); reject(new Error(mensaje)); this.fallo(mensaje); };
+      this.worker.onerror = e => falla(`no se pudo cargar el escritor (${e.message || "error desconocido"})`);
+      this.worker.onmessageerror = () => falla("el escritor recibió datos ilegibles");
       this.worker.onmessage = ({ data }) => {
-        if (data.listo) { this.info.formato = data.formato; resolve(); }
+        if (data.listo) { clearTimeout(plazo); this.info.formato = data.formato; resolve(); }
         if (data.aviso) ui.notifications.warn(`MR · Chronicle: ${data.aviso}`);
-        if (data.error) { this.errores.push(data.error); reject(new Error(data.error)); this.alCambiar(); }
+        if (data.error) falla(data.error);
         if (data.cerrado) this.cerrado?.(data);
         if (data.escrito) { this.ultimaEscritura = performance.now(); this.bytes = data.escrito; }
       };
@@ -75,7 +86,8 @@ export class Pista {
       iniciar: { ruta, prefijo, sampleRate: this.ctx.sampleRate, canales: this.canales, formato: this.formato },
       puerto: canal.port2
     }, [canal.port2]);
-    await listo;
+    try { await listo; }
+    catch (error) { this.worker.terminate(); canal.port1.close(); throw error; }
     this.nodo.port.postMessage({ escritor: canal.port1 }, [canal.port1]);
     this.nodo.port.postMessage({ grabar: true });
     this.grabando = true;
@@ -98,23 +110,20 @@ export class Pista {
   /** Avisa en pantalla (una vez) y en la lista de la mesa. */
   fallo(mensaje) {
     this.errores ??= [];
-    if (this.errores.includes(mensaje)) return;
+    if (this.errores.includes(mensaje) || this.errores.length > 20) return;
     this.errores.push(mensaje);
     ui.notifications.error(`MR · Chronicle: ${mensaje}`, { permanent: true });
     this.alCambiar();
   }
 
-  /** Relaciona la última muestra conocida con la hora del servidor y lo guarda. */
-  async anclar() {
-    // De paso, se vigila que la grabación siga llegando al disco.
-    if (this.grabando && performance.now() - (this.ultimaEscritura ?? this.inicioPerf) > 20_000) {
-      this.fallo(`la pista de ${this.tipo} no se está guardando en el disco. Avisa al máster y revisa el espacio libre.`);
-    }
+  /**
+   * Foto instantánea (sin red) de qué muestra del archivo se capturó en qué instante de
+   * `performance.now()`. La hora del servidor se le suma después, cuando se tenga.
+   */
+  medir() {
     const meta = this.meta;
-    const reloj = await sincronizar();
-    if (!meta || !reloj) return; // sin conexión: la regresión interpola con las demás anclas
-    const ts = this.ctx.getOutputTimestamp();
-    if (!ts.contextTime) return;
+    const ts = this.ctx.getOutputTimestamp?.();
+    if (!meta || !ts?.contextTime) return null;
     // `ts` dice cuándo sale por los altavoces cada instante del contexto. Para una pista de
     // Foundry eso es justo cuando se oye. Para el micro hay que restar lo que tarda el audio
     // en entrar y en salir: es el instante en que se dijo.
@@ -122,15 +131,30 @@ export class Pista {
     // el error que quede es constante por participante y se corrige con `ajustesMs` (palmadas).
     const latencia = this.latenciaEntradaMs === null ? 0
       : (this.ctx.baseLatency + (this.ctx.outputLatency || 0)) * 1000 + this.latenciaEntradaMs;
-    const perfMs = ts.performanceTime + (meta.ctxTime - ts.contextTime) * 1000 - latencia;
-    // serverMs cuenta desde que se lanzó el mundo: si el servidor se reinicia, vuelve a cero.
-    // epochMs (reloj de este equipo) permite a la postproducción detectar ese salto.
-    await anadirLinea(this.ruta, `${this.prefijo}-anclas.txt`, {
-      frame: meta.frame,
-      serverMs: Math.round((perfMs + reloj.offset) * 1000) / 1000,
-      epochMs: Math.round(performance.timeOrigin + perfMs),
+    return { frame: meta.frame, perfMs: ts.performanceTime + (meta.ctxTime - ts.contextTime) * 1000 - latencia };
+  }
+
+  /** Guarda un ancla {frame, serverMs}. serverMs cuenta desde que se lanzó el mundo; epochMs
+   *  (reloj de este equipo) permite a la postproducción detectar un reinicio del servidor. */
+  guardarAncla(medida, reloj) {
+    return anadirLinea(this.ruta, `${this.prefijo}-anclas.txt`, {
+      frame: medida.frame,
+      serverMs: Math.round((medida.perfMs + reloj.offset) * 1000) / 1000,
+      epochMs: Math.round(performance.timeOrigin + medida.perfMs),
       rttMs: Math.round(reloj.rttMs * 10) / 10
     }).catch(() => {}); // el fallo ya se muestra en pantalla
+  }
+
+  /** Ancla periódica. */
+  async anclar() {
+    // De paso, se vigila que la grabación siga llegando al disco.
+    if (this.grabando && performance.now() - (this.ultimaEscritura ?? this.inicioPerf) > 20_000) {
+      this.fallo(`la pista de ${this.tipo} no se está guardando en el disco. Avisa al máster y revisa el espacio libre.`);
+    }
+    const medida = this.medir();
+    const reloj = await sincronizar();
+    if (!medida || !reloj || !this.grabando) return; // sin conexión: la regresión interpola con las demás
+    await this.guardarAncla(medida, reloj);
   }
 
   /** Segundos grabados (por muestras: es lo que de verdad hay en el archivo). */
@@ -138,21 +162,34 @@ export class Pista {
     return this.grabando ? (this.meta?.frame ?? 0) / this.ctx.sampleRate : 0;
   }
 
-  /** Cierra la pista: última ancla, vacía lo pendiente y espera a que el Worker cierre el trozo. */
+  /**
+   * Cierra la pista. Primero se deja de captar (sin esperar a nada de la red); después se espera
+   * a que el escritor confirme que el último trozo quedó guardado, y por último se guarda el ancla
+   * final con la hora del servidor si responde pronto, o con el último desfase conocido.
+   * @returns {Promise<boolean>} si el cierre quedó confirmado
+   */
   async detener() {
-    if (!this.grabando) return;
+    if (!this.grabando) return true;
     clearInterval(this.intervalo);
-    await this.anclar();
+    const medida = this.medir();
     const cerrado = new Promise(resolve => { this.cerrado = resolve; });
     this.nodo.port.postMessage({ fin: true });
-    await Promise.race([cerrado, new Promise(r => setTimeout(r, 5000))]);
-    this.worker.terminate();
     this.grabando = false;
+    const confirmado = await Promise.race([cerrado.then(() => true), espera(PLAZO_CIERRE_MS).then(() => false)]);
+    this.worker.terminate();
     this.soltar();
+    const reloj = await Promise.race([sincronizar({ maxEdadMs: 60_000 }), espera(3000).then(() => null)]) ?? desfase();
+    if (medida && reloj) await this.guardarAncla(medida, reloj);
+    if (!confirmado) {
+      this.fallo(`no se pudo confirmar que el final de la pista de ${this.tipo} quedó guardado. Lo grabado hasta entonces sigue en este navegador: guárdalo o entrégalo igualmente.`);
+    }
+    return confirmado;
   }
 
-  /** Desconecta los nodos. No cierra el contexto: puede ser uno de Foundry. */
+  /** Desconecta los nodos. No cierra el contexto: puede ser uno de Foundry. Se puede llamar varias veces. */
   soltar() {
+    if (this.soltado) return;
+    this.soltado = true;
     try { this.fuente.disconnect(this.nodo); } catch { /* ya desconectado */ }
     this.nodo?.disconnect();
     this.silencio?.disconnect();
@@ -183,17 +220,19 @@ export async function pistaMicro(deviceId) {
   // Si el micro se desconecta, la grabación sigue (en silencio) y, en cuanto vuelve a haber un
   // micro, se engancha de nuevo al mismo procesador: mismo archivo, misma cuenta de muestras.
   const reconectar = async () => {
-    if (p.stream.getAudioTracks()[0]?.readyState !== "ended" || p.reconectando) return;
+    if (p.soltado || p.stream.getAudioTracks()[0]?.readyState !== "ended" || p.reconectando) return;
     p.reconectando = true;
     try {
       const nuevo = await abrirMicro(deviceId).catch(() => abrirMicro());
+      // Mientras se pedía el micro, la pista pudo cerrarse: no se reabre nada que el usuario cerró.
+      if (p.soltado) { nuevo.getTracks().forEach(t => t.stop()); return; }
       const fuente = ctx.createMediaStreamSource(nuevo);
       try { p.fuente.disconnect(); } catch { /* ya desconectada */ }
       fuente.connect(p.nodo);
       Object.assign(p, { fuente, stream: nuevo });
       p.alCambiar();
     } catch { /* aún no hay micro: se reintenta en el próximo cambio de dispositivos */ }
-    p.reconectando = false;
+    finally { p.reconectando = false; }
   };
   navigator.mediaDevices.addEventListener("devicechange", reconectar);
 
@@ -201,12 +240,15 @@ export async function pistaMicro(deviceId) {
   p.procesado = ["echoCancellation", "noiseSuppression", "autoGainControl"].filter(k => ajustes[k] === true);
   const soltar = p.soltar.bind(p);
   p.soltar = () => {
+    if (p.soltado) return;
     navigator.mediaDevices.removeEventListener("devicechange", reconectar);
     soltar();
     p.stream.getTracks().forEach(t => t.stop());
-    ctx.close();
+    ctx.close().catch(() => {});
   };
-  await p.preparar();
+  // Si falla la preparación, no puede quedar el micro abierto.
+  try { await p.preparar(); }
+  catch (error) { p.soltar(); throw error; }
   return p;
 }
 

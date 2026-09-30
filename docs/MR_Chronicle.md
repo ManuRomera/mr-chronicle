@@ -369,6 +369,14 @@ Se probó con una jugadora entrando por el túnel: grabó, entregó (subida a tr
 
 Descartado por ahora: grabar en una ventana aparte servida por HTTPS (por ejemplo, desde GitHub Pages) y controlada desde Foundry con `postMessage`. Evitaría el túnel, pero duplica la arquitectura, y la captura de audio de Foundry seguiría necesitando contexto seguro.
 
+### 11.2. Copia .zip y auditoría (versión 0.2.0)
+
+Tras la auditoría del 30-09-2026, la forma principal de entrega es la **copia .zip**: un único archivo por participante, sin comprimir y con ZIP64 si hace falta, con un inventario de tamaños y CRC. Se sube a la carpeta compartida del grupo y la postproducción lo lee tal cual. Resuelve dos problemas:
+- **Grabación perdida al cambiar de dirección:** OPFS está aislado por origen, así que lo grabado con una dirección de túnel no se ve desde la siguiente.
+- **Sesión cerrada con entregas pendientes:** el panel mantiene además la lista **Grabaciones en este navegador**, independiente de la sesión activa.
+
+La entrega al servidor verifica el tamaño de cada archivo. Los demás arreglos de la auditoría están en el CHANGELOG de la 0.2.0.
+
 ## 12. Postproducción
 
 ```

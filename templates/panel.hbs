@@ -100,27 +100,47 @@
   {{/unless}}{{/if}}
 
   {{! ─── Entrega ─── }}
-  {{#if finalizada}}{{#if hayLocal}}
+  {{#if finalizada}}{{#if actual}}
   <section class="mrc-bloque">
-    <h3>Entregar tu grabación</h3>
-    {{#if entrega}}
+    <h3>Guarda y entrega tu grabación</h3>
+    {{#if direccionCambiante}}<p class="mrc-aviso ambar"><strong>Guarda la copia ahora.</strong> Esta dirección (túnel) cambia la próxima vez, y el navegador solo te enseña la grabación desde la dirección en la que se hizo.</p>{{/if}}
+    {{#if entrega}}{{#if (eq entrega.sesionId s.id)}}
       <div class="mrc-progreso"><span style="width: {{entrega.porcentaje}}%"></span></div>
       <p class="mrc-nota">{{entrega.hechos}} de {{entrega.total}} archivos</p>
       {{#if entrega.error}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/if}}
-      {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde">¡Entregada! Ya está en el servidor.</p>{{/if}}
-      {{#if (eq entrega.fin "descargar")}}<p class="mrc-aviso verde">Guardada. Si no es una carpeta sincronizada, súbela a la carpeta compartida del grupo (arrastrándola a la web de Drive o MEGA).</p>{{/if}}
-    {{else}}
-      <p class="mrc-nota"><strong>Entregar</strong> la sube al servidor de Foundry; si se corta, vuelve a pulsar y solo sube lo que falte.</p>
-      <p class="mrc-nota"><strong>Descargar</strong> la guarda en la carpeta que elijas. Si eliges la carpeta compartida del grupo en Google Drive, MEGA o Dropbox (la que se sincroniza en tu ordenador), se subirá sola y se juntará con la de los demás.</p>
-    {{/if}}
+      {{#if (eq entrega.fin "zip")}}<p class="mrc-aviso verde">Copia guardada. Súbela a la carpeta compartida del grupo (Drive, MEGA…) o pásasela a quien vaya a procesar.</p>{{/if}}
+      {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde">¡Entregada! Está en el servidor y se ha comprobado el tamaño de cada archivo.</p>{{/if}}
+    {{/if}}{{/if}}
     {{#unless entrega.enCurso}}
+    <p class="mrc-nota"><strong>Guardar copia (.zip)</strong> crea un único archivo con tu grabación ({{actual.mb}} MB). Súbelo a la carpeta compartida del grupo: quien procese la sesión lo usa tal cual, sin descomprimirlo.</p>
     <div class="mrc-botones">
-      <button type="button" data-action="entregar" data-modo="subir" class="mrc-principal-btn" {{disabled (not puedeSubir)}}>Entregar</button>
-      <button type="button" data-action="entregar" data-modo="descargar">Descargar</button>
+      <button type="button" data-action="entregar" data-modo="zip" class="mrc-principal-btn">Guardar copia (.zip)</button>
+      <button type="button" data-action="entregar" data-modo="subir" {{disabled (not puedeSubir)}}>Entregar al servidor</button>
     </div>
-    {{#unless puedeSubir}}<p class="mrc-nota">Tu rol no puede subir archivos. Pide al máster que lo active en Configurar permisos → Subir archivos, o descárgala y envíasela.</p>{{/unless}}
-    {{#if entrega.fin}}<button type="button" data-action="borrarLocal" class="mrc-enlace">Borrar la grabación de este navegador</button>{{/if}}
+    {{#unless puedeSubir}}<p class="mrc-nota">Para «Entregar al servidor», el máster tiene que activar Subir archivos para tu rol en Configurar permisos.</p>{{/unless}}
+    {{#if (or actual.guardada actual.subida)}}<button type="button" data-action="borrarLocal" class="mrc-enlace">Borrar la grabación de este navegador</button>{{/if}}
     {{/unless}}
   </section>
   {{/if}}{{/if}}
+
+  {{! ─── Otras grabaciones guardadas en este navegador ─── }}
+  {{#if otras.length}}
+  <section class="mrc-bloque">
+    <h3>Grabaciones en este navegador</h3>
+    <p class="mrc-nota">De sesiones anteriores o ya cerradas. Guarda la copia de las que falten por entregar.</p>
+    {{#if entrega.error}}{{#unless (eq entrega.sesionId s.id)}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/unless}}{{/if}}
+    <ul class="mrc-biblioteca">
+      {{#each otras}}
+      <li>
+        <span class="mrc-nombre">{{nombre}}</span>
+        <span class="mrc-texto">{{mb}} MB · {{#if guardada}}copia guardada{{else}}{{#if subida}}entregada{{else}}<strong>sin guardar</strong>{{/if}}{{/if}}</span>
+        <span class="mrc-botones">
+          <button type="button" data-action="entregar" data-modo="zip" data-sesion="{{sesionId}}">Guardar copia</button>
+          {{#if (or guardada subida)}}<button type="button" data-action="borrarLocal" data-sesion="{{sesionId}}">Borrar</button>{{/if}}
+        </span>
+      </li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
 </div>

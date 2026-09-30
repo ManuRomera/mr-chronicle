@@ -28,11 +28,10 @@ Para poder grabar, los jugadores necesitan entrar por `https://`. En `servidor/`
 
 Al acabar la partida, cada jugador pulsa en el panel de MR · Chronicle (solo se procesan las pistas que el máster eligió grabar):
 
-- **Descargar**, y elige la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox, la que su programa de sincronización tiene en el ordenador. Se crea `<sesión>/<nombre>/` y todo se junta solo.
-  - Si no tiene el programa de sincronización, puede descargar en cualquier carpeta y luego arrastrar esa carpeta a la web de Drive o MEGA, dentro de la carpeta de la sesión.
-- O **Entregar**, que la sube al servidor de Foundry. Luego alguien tiene que copiar `Data/mr-chronicle/<sesión>` del servidor.
+- **Guardar copia (.zip)**: un único archivo por persona. Cada uno lo sube a la **carpeta compartida del grupo** (Drive, MEGA…). No hay que descomprimirlo.
+- O **Entregar al servidor**, que lo sube a Foundry. Luego alguien tiene que copiar `Data/mr-chronicle/<sesión>` del servidor.
 
-Cuando estén todos, la carpeta de la sesión tiene una subcarpeta por participante.
+Junta en una misma carpeta los .zip de todos (y/o las subcarpetas del servidor): esa es la carpeta de la sesión. Se pueden mezclar.
 
 ## 3. Procesar
 

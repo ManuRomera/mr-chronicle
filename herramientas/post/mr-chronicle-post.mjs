@@ -5,8 +5,9 @@
  *   node herramientas/post/mr-chronicle-post.mjs <carpeta-sesion> [opciones]
  *   node herramientas/post/mr-chronicle-post.mjs --comprobar
  *
- * <carpeta-sesion> tiene una subcarpeta por participante: la que dejan las entregas en el
- * servidor (Data/mr-chronicle/<sesion>/) o las descargas en una carpeta compartida.
+ * <carpeta-sesion> tiene una subcarpeta por participante (lo que dejan las entregas en el
+ * servidor: Data/mr-chronicle/<sesion>/) y/o las copias .zip que guarda cada uno desde el panel.
+ * Se pueden mezclar: los .zip se leen tal cual, sin descomprimirlos a mano.
  *
  * Opciones:
  *   --salida <dir>     Carpeta de resultados (por defecto <carpeta-sesion>/salida)
@@ -26,12 +27,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import zlib from "node:zlib";
 import { execFileSync, spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import {
   leerNDJSON, regresion, segmentosWhisper, marcarEcos, tramosDeVoz, ajustarAVoz, corregir,
-  transcripcionMD, subtitulosSRT, etiquetasAudacity, reloj
+  transcripcionMD, subtitulosSRT, etiquetasAudacity, reloj, corregirReinicios, mediana
 } from "./lib.mjs";
+import { extraerZip, crc32 } from "./zip.mjs";
 
 const { values: op, positionals } = parseArgs({
   allowPositionals: true,
@@ -55,8 +58,12 @@ function programa(nombre) {
   const propio = path.join(BIN, process.platform === "win32" ? `${nombre}.exe` : nombre);
   return fs.existsSync(propio) ? propio : nombre;
 }
-// Funciona en Mac, Linux y Windows: si el programa no existe, spawnSync da ENOENT.
-const hay = nombre => !spawnSync(programa(nombre), ["-h"], { stdio: "ignore" }).error;
+// Funciona en Mac, Linux y Windows. Además de existir, tiene que arrancar: un programa al que le
+// faltan librerías se lanza pero termina con error, y eso no cuenta como instalado.
+const hay = nombre => {
+  const r = spawnSync(programa(nombre), ["-h"], { stdio: "ignore", timeout: 20_000 });
+  return !r.error && r.status !== null && r.status < 2;
+};
 
 function buscarConfig(sesion) {
   if (op.config) return op.config;
@@ -82,7 +89,9 @@ if (!positionals[0]) {
 
 const SESION = path.resolve(positionals[0]);
 const SALIDA = path.resolve(op.salida ?? path.join(SESION, "salida"));
-const TMP = path.join(SALIDA, ".tmp");
+// Temporal propio de esta ejecución: dos procesados a la vez no se pisan, y se borra al salir.
+const TMP = path.join(SALIDA, `.tmp-${process.pid}-${Date.now()}`);
+process.on("exit", () => fs.rmSync(TMP, { recursive: true, force: true }));
 const rutaConfig = buscarConfig(SESION);
 const config = rutaConfig ? JSON.parse(fs.readFileSync(rutaConfig, "utf8")) : {};
 if (rutaConfig) console.log(`Configuración: ${rutaConfig}`);
@@ -94,53 +103,105 @@ const GUARDAR_BRUTA = op["con-bruta"] || config.guardarBruta === true;
 const avisos = [];
 const aviso = t => { avisos.push(t); console.warn(`⚠ ${t}`); };
 const paso = t => console.log(`\n▸ ${t}`);
+const zlibRapido = Boolean(zlib.crc32); // con Node reciente el CRC es rápido: se comprueba todo
 
 const ejecutar = (bin, args) => execFileSync(programa(bin), args, { stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 26 });
 function detectarSilencios(archivo) {
   // silencedetect informa por stderr.
   const r = spawnSync(programa("ffmpeg"), ["-hide_banner", "-nostats", "-i", archivo, "-af", `silencedetect=noise=${config.umbralSilencioDb ?? -40}dB:d=0.5`, "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
-  return r.stderr;
+  return r.status === 0 ? r.stderr : null;
 }
-const slug = t => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const slug = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 if (!hay("ffmpeg")) { console.error("Falta ffmpeg. Ejecuta el instalador de herramientas/instalar/."); process.exit(1); }
+// Se empieza de cero: nunca se mezclan resultados de un procesado anterior con los nuevos.
+for (const f of ["stems", "transcript.json", "transcript.md", "transcript.srt", "marcadores.txt", "musica.json", "informe.md"]) {
+  fs.rmSync(path.join(SALIDA, f), { recursive: true, force: true });
+}
 fs.mkdirSync(path.join(SALIDA, "stems"), { recursive: true });
 fs.mkdirSync(TMP, { recursive: true });
 
 // ─── 1. Leer las entregas ─────────────────────────────────────────────────
 
 paso("Leyendo entregas");
+const carpetas = [];
+for (const nombre of fs.readdirSync(SESION).sort()) {
+  const ruta = path.join(SESION, nombre);
+  if (nombre.startsWith(".") || path.resolve(ruta) === SALIDA) continue;
+  if (fs.statSync(ruta).isDirectory()) carpetas.push(ruta);
+  else if (/\.zip$/i.test(nombre)) {
+    try {
+      const { carpetas: dentro, danados } = extraerZip(ruta, path.join(TMP, "zips", nombre));
+      carpetas.push(...dentro);
+      for (const d of danados) aviso(`${nombre}: ${d} está dañado (no coincide su comprobación). Vuelve a pedir esa copia.`);
+    } catch (e) { aviso(`${nombre}: ${e.message}. Se omite.`); }
+  }
+}
+
 const participantes = [];
-for (const userId of fs.readdirSync(SESION).sort()) {
-  const dir = path.join(SESION, userId);
-  if (!fs.statSync(dir).isDirectory() || userId === path.basename(SALIDA)) continue;
+for (const dir of carpetas) {
   const archivos = fs.readdirSync(dir);
-  const manifiesto = archivos.includes("manifiesto.json")
-    ? JSON.parse(fs.readFileSync(path.join(dir, "manifiesto.json"), "utf8"))
-    : null;
-  if (!manifiesto) aviso(`${userId}: falta manifiesto.json (entrega incompleta). Se usa lo que haya.`);
+  let manifiesto = null;
+  if (archivos.includes("manifiesto.json")) {
+    try { manifiesto = JSON.parse(fs.readFileSync(path.join(dir, "manifiesto.json"), "utf8")); }
+    catch { aviso(`${path.basename(dir)}: manifiesto.json está dañado. Se usa lo que haya.`); }
+  } else aviso(`${path.basename(dir)}: falta manifiesto.json (entrega incompleta). Se usa lo que haya.`);
+  const userId = manifiesto?.usuario?.id ?? path.basename(dir);
+
+  // Inventario (lo generan la copia .zip y la entrega al servidor): nada falta ni está dañado.
+  const inventarios = archivos.filter(a => /^inventario.*\.json$/.test(a)).sort();
+  if (inventarios.length) {
+    try {
+      const inv = JSON.parse(fs.readFileSync(path.join(dir, inventarios.at(-1)), "utf8"));
+      for (const f of inv.archivos ?? []) {
+        const ruta = path.join(dir, f.nombre);
+        if (!fs.existsSync(ruta)) aviso(`${manifiesto?.usuario?.nombre ?? userId}: falta ${f.nombre}, que estaba en su grabación.`);
+        else if (fs.statSync(ruta).size !== f.bytes) aviso(`${manifiesto?.usuario?.nombre ?? userId}: ${f.nombre} está incompleto (${fs.statSync(ruta).size} de ${f.bytes} bytes).`);
+        else if (zlibRapido && crc32(fs.readFileSync(ruta)) !== f.crc32) aviso(`${manifiesto?.usuario?.nombre ?? userId}: ${f.nombre} está dañado.`);
+      }
+    } catch { aviso(`${path.basename(dir)}: el inventario está dañado; no se ha podido comprobar la entrega.`); }
+  }
+
   const tramos = {};
   for (const a of archivos) {
     const m = a.match(/^(voz|musica|ambiente|efectos)-(\d+)-(\d{6})\.(wav|ogg)$/);
-    if (m) (tramos[`${m[1]}-${m[2]}`] ??= []).push(a);
+    if (m) (tramos[`${m[1]}-${m[2]}`] ??= []).push({ archivo: a, n: Number(m[3]) });
   }
   const leer = n => fs.existsSync(path.join(dir, n)) ? leerNDJSON(fs.readFileSync(path.join(dir, n), "utf8")) : [];
-  participantes.push({
+  const nuevo = {
     userId, dir, manifiesto,
-    nombre: manifiesto?.usuario.nombre ?? userId,
-    personaje: manifiesto?.usuario.personaje ?? null,
-    tramos: Object.fromEntries(Object.entries(tramos).map(([k, v]) => [k, v.sort()])),
+    nombre: manifiesto?.usuario?.nombre ?? userId,
+    personaje: manifiesto?.usuario?.personaje ?? null,
+    publica: manifiesto?.consentimiento?.publicar !== false,
+    tramos: Object.fromEntries(Object.entries(tramos).map(([k, v]) => [k, v.sort((x, y) => x.n - y.n)])),
     marcadores: leer("marcadores.txt"),
     musica: leer("musica.txt"),
     leer
-  });
-  console.log(`  ${manifiesto?.usuario.nombre ?? userId}: ${Object.keys(tramos).join(", ") || "sin audio"}`);
+  };
+  // La misma persona dos veces (carpeta y .zip, o dos copias): se usa la que tiene más audio.
+  const audio = p => Object.values(p.tramos).flat().reduce((t, x) => t + fs.statSync(path.join(p.dir, x.archivo)).size, 0);
+  const previo = participantes.findIndex(p => p.userId === userId);
+  if (previo >= 0) {
+    aviso(`${nuevo.nombre} aparece dos veces (carpeta y copia, o dos copias). Se usa la que tiene más audio.`);
+    if (audio(nuevo) > audio(participantes[previo])) participantes[previo] = nuevo;
+    continue;
+  }
+  participantes.push(nuevo);
 }
 if (!participantes.length) { console.error("No hay entregas en esa carpeta."); process.exit(1); }
 
+// Etiqueta legible y única: si hay dos «Ana», se distinguen por el principio de su identificador.
+for (const p of participantes) {
+  const iguales = participantes.filter(q => slug(q.nombre) === slug(p.nombre)).length > 1;
+  p.etiqueta = iguales ? `${p.nombre} (${p.userId.slice(0, 4)})` : p.nombre;
+  console.log(`  ${p.etiqueta}: ${Object.keys(p.tramos).join(", ") || "sin audio"}`);
+}
+
+const sesiones = new Set(participantes.map(p => p.manifiesto?.sesion?.id).filter(Boolean));
+if (sesiones.size > 1) aviso(`Hay entregas de varias sesiones mezcladas (${[...sesiones].join(", ")}). Revisa la carpeta.`);
 const sesion = participantes.map(p => p.manifiesto?.sesion).find(Boolean) ?? { id: path.basename(SESION), nombre: path.basename(SESION) };
 for (const p of participantes) {
-  if (p.manifiesto && !p.manifiesto.consentimiento.publicar) aviso(`${p.nombre} NO ha aceptado que se publique su voz. No uses su pista en el podcast.`);
+  if (!p.publica) aviso(`${p.etiqueta} NO ha aceptado que se publique su voz: su pista está en stems/no-publicar/.`);
 }
 
 // ─── 2. Deriva y alineación ───────────────────────────────────────────────
@@ -150,65 +211,111 @@ const ajuste = p => config.ajustesMs?.[p.nombre] ?? config.ajustesMs?.[p.userId]
 const tramos = [];
 let reinicio = false;
 for (const p of participantes) {
-  // La hora del servidor de Foundry cuenta desde que se lanzó el mundo. Si el servidor se
-  // reinició, los tramos siguientes vienen en otra base; el reloj del equipo lo delata.
-  const diferencia = anclas => {
-    const d = anclas.filter(a => Number.isFinite(a.epochMs)).map(a => a.epochMs - a.serverMs).sort((x, y) => x - y);
-    return d.length ? d[Math.floor(d.length / 2)] : null;
-  };
-  const porNumero = Object.keys(p.tramos).sort((x, y) => Number(x.split("-")[1]) - Number(y.split("-")[1]));
-  const referencia = porNumero.length ? diferencia(p.leer(`${porNumero[0]}-anclas.txt`)) : null;
+  // La hora del servidor de Foundry cuenta desde que se lanzó el mundo: si el servidor se
+  // reinicia, vuelve a cero. El reloj del equipo (epochMs) lo delata, ancla a ancla, aunque
+  // pase en mitad de un tramo; con el mismo mapa se corrigen marcadores y música.
+  const todas = Object.keys(p.tramos).flatMap(k => p.leer(`${k}-anclas.txt`));
+  const corrector = corregirReinicios(todas);
+  if (corrector.reinicios) {
+    reinicio = true;
+    aviso(`${p.etiqueta}: el servidor de Foundry se reinició durante la sesión. Se ha recolocado con el reloj del equipo (precisión algo menor: revisa a oído).`);
+  }
+  p.marcadores = p.marcadores.map(corrector.corregir);
+  p.musica = p.musica.map(corrector.corregir);
 
   for (const [prefijo, trozos] of Object.entries(p.tramos)) {
-    let canales, fsNominal, frames, raw = null;
-    if (trozos[0].endsWith(".ogg")) {
-      // Música y efectos: trozos consecutivos de un único flujo Ogg Opus. Se pegan y se decodifican.
-      canales = fs.readFileSync(path.join(p.dir, trozos[0]))[37]; // OpusHead: canales
+    const numeroTramo = Number(prefijo.split("-")[1]);
+    let canales, fsNominal, frames, raw;
+    raw = path.join(TMP, `${p.userId}-${prefijo}.raw`);
+    if (trozos[0].archivo.endsWith(".ogg")) {
+      // Música y efectos: trozos consecutivos de un único flujo Ogg Opus. Se pegan (por partes:
+      // nunca todo en memoria) y se decodifican.
+      if (trozos[0].n !== 1) { aviso(`${p.etiqueta} ${prefijo}: falta el primer trozo, que tiene las cabeceras. Se omite esta pista.`); continue; }
+      const huecos = trozos.filter((t, i) => i && t.n !== trozos[i - 1].n + 1);
+      // ponytail: un hueco en Ogg no se puede rellenar con precisión; se avisa. Rellenarlo exigiría
+      // decodificar por segmentos y colocarlos por su gránulo.
+      if (huecos.length) aviso(`${p.etiqueta} ${prefijo}: faltan trozos de la pista de Foundry; a partir del hueco puede ir desplazada.`);
+      canales = fs.readFileSync(path.join(p.dir, trozos[0].archivo)).subarray(0, 64)[37]; // OpusHead: canales
       fsNominal = 48000;
       const ogg = path.join(TMP, `${p.userId}-${prefijo}.ogg`);
-      fs.writeFileSync(ogg, Buffer.concat(trozos.map(t => fs.readFileSync(path.join(p.dir, t)))));
-      raw = path.join(TMP, `${p.userId}-${prefijo}.raw`);
+      const fd = fs.openSync(ogg, "w");
+      for (const t of trozos) fs.writeSync(fd, fs.readFileSync(path.join(p.dir, t.archivo)));
+      fs.closeSync(fd);
       ejecutar("ffmpeg", ["-v", "error", "-y", "-i", ogg, "-f", "s16le", "-ar", "48000", "-ac", String(canales), raw]);
       fs.rmSync(ogg);
-      frames = [fs.statSync(raw).size / (2 * canales)];
+      frames = fs.statSync(raw).size / (2 * canales);
     } else {
-      const cab = fs.readFileSync(path.join(p.dir, trozos[0])).subarray(0, 44);
+      const cab = fs.readFileSync(path.join(p.dir, trozos[0].archivo)).subarray(0, 44);
       canales = cab.readUInt16LE(22); fsNominal = cab.readUInt32LE(24);
-      // No se usa el tamaño de la cabecera: si el navegador murió a mitad, estaría mal.
-      frames = trozos.map(t => (fs.statSync(path.join(p.dir, t)).size - 44) / (2 * canales));
+      // Trozos de 60 s exactos salvo el último. Un trozo que falta o se quedó corto se rellena con
+      // silencio de su duración: lo que viene detrás sigue en su sitio.
+      const porTrozo = 60 * fsNominal * canales * 2;
+      const fd = fs.openSync(raw, "w");
+      let bytes = 0;
+      const ultimo = trozos.at(-1).n;
+      for (let n = 1; n <= ultimo; n++) {
+        const t = trozos.find(x => x.n === n);
+        let datos = t ? fs.readFileSync(path.join(p.dir, t.archivo)).subarray(44) : Buffer.alloc(0);
+        datos = datos.subarray(0, datos.length - (datos.length % (2 * canales)));
+        if (!t) aviso(`${p.etiqueta} ${prefijo}: falta el trozo ${n} (minuto ${n}); se rellena con silencio para no desplazar el resto.`);
+        else if (n < ultimo && datos.length < porTrozo) aviso(`${p.etiqueta} ${prefijo}: el trozo ${n} está incompleto; se completa con silencio.`);
+        fs.writeSync(fd, datos);
+        bytes += datos.length;
+        if (n < ultimo && datos.length < porTrozo) {
+          fs.writeSync(fd, Buffer.alloc(porTrozo - datos.length));
+          bytes += porTrozo - datos.length;
+        }
+      }
+      fs.closeSync(fd);
+      frames = bytes / (2 * canales);
     }
-    let anclas = p.leer(`${prefijo}-anclas.txt`);
-    const d = diferencia(anclas);
-    if (referencia !== null && d !== null && Math.abs(d - referencia) > 2000) {
-      anclas = anclas.map(a => ({ ...a, serverMs: a.serverMs + (d - referencia) }));
-      reinicio = true;
-      aviso(`${p.nombre} ${prefijo}: el servidor de Foundry se reinició durante la sesión. Tramo recolocado con el reloj del equipo (precisión menor: revisa a oído).`);
-    }
+
+    // Anclas corregidas; si hay pocas o dan una frecuencia imposible, frecuencia nominal y aviso.
+    const anclas = p.leer(`${prefijo}-anclas.txt`).map(corrector.corregir);
+    const nominal = 1000 / fsNominal;
     let r;
-    try { r = regresion(anclas); }
-    catch (e) { aviso(`${p.nombre} ${prefijo}: ${e.message} Se omite.`); continue; }
+    try {
+      r = regresion(anclas);
+      const ppmCalculado = (r.fsReal / fsNominal - 1) * 1e6;
+      if (!Number.isFinite(ppmCalculado) || Math.abs(ppmCalculado) > 1000) {
+        const a = mediana(anclas.map(x => x.serverMs - x.frame * nominal));
+        aviso(`${p.etiqueta} ${prefijo}: las anclas dan una deriva imposible (${Math.round(ppmCalculado)} ppm). Se usa la frecuencia nominal: revisa la alineación a oído.`);
+        r = { ...r, a, b: nominal, fsReal: fsNominal, residuoMax: NaN };
+      }
+    } catch {
+      if (anclas.length === 1) {
+        r = { a: anclas[0].serverMs - anclas[0].frame * nominal, b: nominal, fsReal: fsNominal, residuoMax: 0, anclasUsadas: 1, anclasTotales: 1 };
+        aviso(`${p.etiqueta} ${prefijo}: solo tiene un ancla (tramo muy corto o sin conexión). Se asume la frecuencia nominal.`);
+      } else if (numeroTramo === 1 && Number.isFinite(sesion.inicioServerMs)) {
+        r = { a: sesion.inicioServerMs, b: nominal, fsReal: fsNominal, residuoMax: NaN, anclasUsadas: 0, anclasTotales: 0 };
+        aviso(`${p.etiqueta} ${prefijo}: no tiene anclas. Se coloca al inicio de la sesión: revisa la alineación a oído.`);
+      } else {
+        aviso(`${p.etiqueta} ${prefijo}: no tiene anclas y no se puede saber dónde va. Se omite (el audio sigue en su carpeta).`);
+        fs.rmSync(raw, { force: true });
+        continue;
+      }
+    }
     const ppm = (r.fsReal / fsNominal - 1) * 1e6;
-    if (r.hueco) aviso(`${p.nombre} ${prefijo}: error residual de ${r.residuoMax.toFixed(0)} ms. Probablemente se perdieron muestras; revisa la alineación a oído.`);
-    if (Math.abs(ppm) > 300) aviso(`${p.nombre} ${prefijo}: deriva de ${ppm.toFixed(0)} ppm, anormalmente alta.`);
-    tramos.push({ p, prefijo, tipo: prefijo.split("-")[0], trozos, canales, fsNominal, frames: frames.reduce((a, b) => a + b, 0), r, ppm, raw });
+    if (r.hueco) aviso(`${p.etiqueta} ${prefijo}: error residual de ${r.residuoMax.toFixed(0)} ms. Probablemente se perdieron muestras; revisa la alineación a oído.`);
+    else if (Math.abs(ppm) > 300) aviso(`${p.etiqueta} ${prefijo}: deriva de ${ppm.toFixed(0)} ppm, anormalmente alta.`);
+    tramos.push({ p, prefijo, tipo: prefijo.split("-")[0], canales, fsNominal, frames, r, ppm, raw });
   }
 }
-if (!tramos.length) { console.error("Ningún tramo tiene anclas suficientes."); process.exit(1); }
+if (!tramos.length) { console.error("No hay ninguna pista que se pueda colocar."); process.exit(1); }
 
-const t0 = sesion.inicioServerMs ?? Math.min(...tramos.map(t => t.r.a));
+// El inicio de sesión está en la base de la primera época, que es a la que se corrige todo; el
+// final lo marca el máster, quizá tras un reinicio, así que entonces manda el final de las pistas.
+const t0 = Number.isFinite(sesion.inicioServerMs) ? sesion.inicioServerMs : Math.min(...tramos.map(t => t.r.a));
 const finTramos = Math.max(...tramos.map(t => t.r.a + t.r.b * t.frames));
-const fin = reinicio ? finTramos : sesion.finServerMs ?? finTramos;
+const fin = reinicio || !Number.isFinite(sesion.finServerMs) ? finTramos : Math.max(sesion.finServerMs, t0 + 1000);
 const duracion = (fin - t0) / 1000;
 console.log(`  Sesión: ${reloj(duracion * 1000)}`);
 
 paso("Alineando pistas");
+// Varios tramos de una misma pista (alguien recargó el navegador) se colocan cada uno en su sitio
+// y luego se juntan en una.
+const pistas = new Map();
 for (const t of tramos) {
-  const raw = t.raw ?? path.join(TMP, `${t.p.userId}-${t.prefijo}.raw`);
-  if (!t.raw) {
-    const fd = fs.openSync(raw, "w");
-    for (const trozo of t.trozos) fs.writeSync(fd, fs.readFileSync(path.join(t.p.dir, trozo)).subarray(44));
-    fs.closeSync(fd);
-  }
   const inicio = (t.r.a + ajuste(t.p) - t0) / 1000;
   t.alineado = path.join(TMP, `${t.p.userId}-${t.prefijo}.wav`);
   // Todo por número de muestras, nunca por marcas de tiempo: cada versión de ffmpeg las
@@ -224,26 +331,31 @@ for (const t of tramos) {
     desplazamiento > 0 ? `adelay=delays=${desplazamiento}S:all=1` : desplazamiento < 0 ? `atrim=start_sample=${-desplazamiento}` : null,
     `apad=whole_len=${totalMuestras}`, `atrim=end_sample=${totalMuestras}`
   ].filter(Boolean);
-  ejecutar("ffmpeg", ["-v", "error", "-y", "-f", "s16le", "-ar", String(t.fsNominal), "-ac", String(t.canales), "-i", raw,
+  ejecutar("ffmpeg", ["-v", "error", "-y", "-f", "s16le", "-ar", String(t.fsNominal), "-ac", String(t.canales), "-i", t.raw,
     "-af", filtros.join(","), "-c:a", "pcm_s16le", t.alineado]);
-  fs.rmSync(raw);
-  console.log(`  ${t.p.nombre} ${t.prefijo}: empieza en ${inicio.toFixed(3)} s · deriva ${t.ppm.toFixed(1)} ppm · residuo ${t.r.residuoMax.toFixed(1)} ms`);
-}
-
-// Varios tramos de una misma pista (alguien recargó el navegador): se juntan en una.
-const pistas = new Map();
-for (const t of tramos) {
+  fs.rmSync(t.raw);
+  console.log(`  ${t.p.etiqueta} ${t.prefijo}: empieza en ${inicio.toFixed(3)} s · deriva ${t.ppm.toFixed(1)} ppm · residuo ${Number.isFinite(t.r.residuoMax) ? t.r.residuoMax.toFixed(1) : "?"} ms`);
   const clave = `${t.p.userId}|${t.tipo}`;
   if (!pistas.has(clave)) pistas.set(clave, { p: t.p, tipo: t.tipo, archivos: [] });
   pistas.get(clave).archivos.push(t.alineado);
 }
-const nombreStem = pista => pista.tipo === "voz" ? `voz-${slug(pista.p.nombre)}` : `foundry-${pista.tipo}`;
+
+// Nombres de archivo únicos: dos «Ana», o dos personas que graban música de Foundry, no se pisan.
+const base = pista => pista.tipo === "voz" ? `voz-${slug(pista.p.nombre)}` : `foundry-${pista.tipo}`;
+const todasPistas = [...pistas.values()];
+for (const pista of todasPistas) {
+  const repetido = todasPistas.filter(q => base(q) === base(pista)).length > 1;
+  pista.nombre = !repetido ? base(pista)
+    : pista.tipo === "voz" ? `${base(pista)}-${pista.p.userId.slice(0, 4)}` : `${base(pista)}-${slug(pista.p.nombre)}-${pista.p.userId.slice(0, 4)}`;
+}
+const nombreStem = pista => pista.nombre;
 for (const pista of pistas.values()) {
   const bruto = path.join(TMP, `${nombreStem(pista)}.bruto.wav`);
   if (pista.archivos.length === 1) fs.renameSync(pista.archivos[0], bruto);
   else {
     ejecutar("ffmpeg", ["-v", "error", "-y", ...pista.archivos.flatMap(a => ["-i", a]),
       "-filter_complex", `amix=inputs=${pista.archivos.length}:normalize=0:duration=longest`, "-c:a", "pcm_s16le", bruto]);
+    for (const a of pista.archivos) fs.rmSync(a);
   }
   pista.bruto = bruto;
 }
@@ -261,7 +373,7 @@ if (!op["sin-ruido"]) {
       ejecutar("deep-filter", ["-D", "-a", String(config.reduccionRuidoDb ?? 30), "-o", destino, v.bruto]);
       v.limpio = path.join(TMP, `${nombreStem(v)}.limpio.wav`);
       fs.renameSync(path.join(destino, path.basename(v.bruto)), v.limpio);
-      console.log(`  ${v.p.nombre}`);
+      console.log(`  ${v.p.etiqueta}`);
     }
   }
 }
@@ -287,13 +399,15 @@ if (!op["sin-whisper"]) {
       ejecutar("whisper-cli", args);
       const json = JSON.parse(fs.readFileSync(`${base}.json`, "utf8"));
       const propios = segmentosWhisper(json, {
-        sessionId: sesion.id, participantId: v.p.userId, speaker: v.p.nombre, character: v.p.personaje,
+        sessionId: sesion.id, participantId: v.p.userId, speaker: v.p.etiqueta, character: v.p.personaje,
         engine: `whisper.cpp/${path.basename(MODELO, ".bin").replace(/^ggml-/, "")}`
       });
-      ajustarAVoz(propios, tramosDeVoz(detectarSilencios(v.limpio ?? v.bruto), duracion * 1000));
+      const silencios = detectarSilencios(v.limpio ?? v.bruto);
+      if (silencios === null) aviso(`${v.p.etiqueta}: no se pudo analizar dónde hay voz; los tiempos del texto son los de Whisper (menos precisos).`);
+      else ajustarAVoz(propios, tramosDeVoz(silencios, duracion * 1000));
       for (const s of propios) s.text = corregir(s.text, config.correcciones);
       segmentos.push(...propios);
-      console.log(`  ${v.p.nombre}: ${((Date.now() - antes) / 1000).toFixed(0)} s`);
+      console.log(`  ${v.p.etiqueta}: ${((Date.now() - antes) / 1000).toFixed(0)} s`);
     }
     segmentos = marcarEcos(segmentos);
     const alucinaciones = segmentos.filter(s => s.flags.includes("alucinacion") || s.flags.includes("sin-voz")).length;
@@ -307,19 +421,22 @@ if (!op["sin-whisper"]) {
 
 paso(`Exportando (pistas en ${FORMATO})`);
 
-/** Pasa una pista de trabajo (WAV) al formato final de stems/. */
-function codificar(entrada, nombre, canales) {
+/** Pasa una pista de trabajo (WAV) al formato final de stems/ (o stems/no-publicar/). */
+function codificar(entrada, nombre, canales, carpeta = "stems") {
   const opciones = {
     wav: ["-c:a", "pcm_s16le"],
     flac: ["-c:a", "flac"],
     opus: ["-c:a", "libopus", "-b:a", canales === 2 ? "160k" : "96k"]
   }[FORMATO];
-  ejecutar("ffmpeg", ["-v", "error", "-y", "-i", entrada, ...opciones, path.join(SALIDA, "stems", `${nombre}.${FORMATO}`)]);
+  fs.mkdirSync(path.join(SALIDA, carpeta), { recursive: true });
+  ejecutar("ffmpeg", ["-v", "error", "-y", "-i", entrada, ...opciones, path.join(SALIDA, carpeta, `${nombre}.${FORMATO}`)]);
 }
 for (const pista of pistas.values()) {
   const canales = pista.tipo === "voz" ? 1 : 2;
-  codificar(pista.limpio ?? pista.bruto, nombreStem(pista), canales);
-  if (pista.tipo === "voz" && pista.limpio && GUARDAR_BRUTA) codificar(pista.bruto, `${nombreStem(pista)}.bruta`, canales);
+  // La voz de quien no autorizó publicar va aparte, para no montarla por error.
+  const carpeta = pista.tipo === "voz" && !pista.p.publica ? "stems/no-publicar" : "stems";
+  codificar(pista.limpio ?? pista.bruto, nombreStem(pista), canales, carpeta);
+  if (pista.tipo === "voz" && pista.limpio && GUARDAR_BRUTA) codificar(pista.bruto, `${nombreStem(pista)}.bruta`, canales, carpeta);
 }
 
 const escribir = (nombre, contenido) => fs.writeFileSync(path.join(SALIDA, nombre), contenido);
@@ -332,7 +449,7 @@ if (segmentos.length) {
 
 const marcadores = participantes.flatMap(p => p.marcadores.map(m => ({
   ms: m.serverMs - t0, tipo: m.tipo,
-  etiqueta: `${p.nombre}: ${{ momento: "★", cortar: "✂ CORTAR", pausa: "❚❚ pausa", reanuda: "▶ reanuda" }[m.tipo] ?? m.tipo}${m.texto ? ` ${m.texto}` : ""}`
+  etiqueta: `${p.etiqueta}: ${{ momento: "★", cortar: "✂ CORTAR", pausa: "❚❚ pausa", reanuda: "▶ reanuda" }[m.tipo] ?? m.tipo}${m.texto ? ` ${m.texto}` : ""}`
 }))).sort((a, b) => a.ms - b.ms);
 if (marcadores.length) escribir("marcadores.txt", etiquetasAudacity(marcadores));
 
@@ -343,7 +460,7 @@ const lista = (items, vacio) => (items.length ? items : [vacio]).map(i => `- ${i
 const informe = [
   `# Informe de postproducción · ${sesion.nombre}`,
   "",
-  `Duración: ${reloj(duracion * 1000)} · Participantes: ${participantes.map(p => p.nombre).join(", ")}`,
+  `Duración: ${reloj(duracion * 1000)} · Participantes: ${participantes.map(p => p.etiqueta).join(", ")}`,
   "",
   "## Avisos",
   "",
@@ -353,7 +470,7 @@ const informe = [
   "",
   "| Participante | Tramo | Inicio | Deriva | Residuo | Anclas |",
   "|---|---|---|---|---|---|",
-  ...tramos.map(t => `| ${t.p.nombre} | ${t.prefijo} | ${((t.r.a + ajuste(t.p) - t0) / 1000).toFixed(3)} s | ${t.ppm.toFixed(1)} ppm | ${t.r.residuoMax.toFixed(1)} ms | ${t.r.anclasUsadas}/${t.r.anclasTotales} |`),
+  ...tramos.map(t => `| ${t.p.etiqueta} | ${t.prefijo} | ${((t.r.a + ajuste(t.p) - t0) / 1000).toFixed(3)} s | ${t.ppm.toFixed(1)} ppm | ${Number.isFinite(t.r.residuoMax) ? `${t.r.residuoMax.toFixed(1)} ms` : "—"} | ${t.r.anclasUsadas ?? "?"}/${t.r.anclasTotales ?? "?"} |`),
   "",
   `Todas las pistas de \`stems/\` (en ${FORMATO}) empiezan en 0:00 y duran lo mismo: arrástralas al editor y ya están alineadas.`,
   "La voz original, sin limpiar, sigue en la carpeta de cada participante (o usa --con-bruta para tenerla también alineada en stems/).",
@@ -369,6 +486,5 @@ const informe = [
 ].join("\n") + "\n";
 escribir("informe.md", informe);
 
-fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`\n✔ Listo: ${SALIDA}`);
 if (avisos.length) console.log(`  ${avisos.length} avisos: mira informe.md`);

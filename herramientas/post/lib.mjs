@@ -9,6 +9,34 @@ export function leerNDJSON(texto) {
   });
 }
 
+export const mediana = xs => {
+  const o = [...xs].sort((x, y) => x - y);
+  return o.length ? o[Math.floor(o.length / 2)] : NaN;
+};
+
+/**
+ * Reinicios del servidor de Foundry: su hora (serverMs) vuelve a cero, pero el reloj del equipo
+ * (epochMs) no. La diferencia epochMs − serverMs es casi constante mientras no haya reinicio; si
+ * salta, esa ancla (o marcador, o evento de música) se devuelve a la base de la primera época.
+ * Funciona aunque el reinicio pase en mitad de un tramo.
+ * @returns {{reinicios: boolean, corregir: (x: object) => object}}
+ */
+export function corregirReinicios(anclas, { umbralMs = 2000 } = {}) {
+  const con = anclas.filter(a => Number.isFinite(a?.epochMs) && Number.isFinite(a?.serverMs))
+    .sort((x, y) => x.epochMs - y.epochMs);
+  if (!con.length) return { reinicios: false, corregir: x => x };
+  const d0 = con[0].epochMs - con[0].serverMs;
+  const ref = mediana(con.map(a => a.epochMs - a.serverMs).filter(d => Math.abs(d - d0) <= umbralMs));
+  return {
+    reinicios: con.some(a => Math.abs(a.epochMs - a.serverMs - ref) > umbralMs),
+    corregir: x => {
+      if (!Number.isFinite(x?.epochMs) || !Number.isFinite(x?.serverMs)) return x;
+      const d = x.epochMs - x.serverMs;
+      return Math.abs(d - ref) > umbralMs ? { ...x, serverMs: x.serverMs + (d - ref) } : x;
+    }
+  };
+}
+
 /**
  * Recta serverMs = a + b·frame por mínimos cuadrados.
  * Descarta las anclas con ida y vuelta alta (medidas peores) y avisa si queda un residuo

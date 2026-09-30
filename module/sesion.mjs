@@ -6,19 +6,25 @@
  * participante (para el panel) y la petición de crear carpetas en el servidor.
  *
  * sesion = {id, nombre, fase: preparada|grabando|pausada|finalizada, canales: {musica, ambiente, efectos},
- *           inicioServerMs, finServerMs}
+ *           grabadorFoundry (usuario que graba las pistas de Foundry), inicioServerMs, finServerMs}
  * Al iniciar, inicioServerMs queda 5 s en el futuro: todos ven la misma cuenta atrás y empiezan a la vez.
  */
 import { pistaMicro, probarAlmacenamiento } from "./grabadora.mjs";
 import { pistasFoundry, registrarMusica } from "./foundry-audio-tap.mjs";
-import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, existe, siFalla } from "./opfs.mjs";
+import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, existe, listar, siFalla } from "./opfs.mjs";
 import { ahora, sincronizar } from "./tiempo.mjs";
-import { subir, descargar, crearCarpetas } from "./entrega.mjs";
+import { subir, guardarCopia, crearCarpetas } from "./entrega.mjs";
 
 export const ID = "mr-chronicle";
 const SOCKET = `module.${ID}`;
 const ESTADO_CADA_MS = 3000;
 const CUENTA_ATRAS_MS = 5000;
+const ESTADO_CADUCA_MS = 10_000;
+const TRAMO = /^(?:voz|musica|ambiente|efectos)-(\d+)-\d{6}\./;
+
+/** Nombre de carpeta y de archivo legible y único: «Ana-Ru20». */
+export const nombreArchivo = usuario =>
+  `${(usuario.name ?? usuario.nombre ?? "").replace(/[^\p{L}\p{N} _-]+/gu, "-").trim() || "participante"}-${(usuario.id ?? "").slice(0, 4)}`;
 export const CANALES = { musica: "Música", ambiente: "Ambiente", efectos: "Efectos" };
 
 /** 3725 → «1:02:05». */
@@ -35,6 +41,9 @@ class Chronicle {
   entrega = null;       // {hechos, total, error, fin}
   manifiesto = null;
   ocupado = false;
+  operacion = 0;        // cada inicio o parada la incrementa: un inicio pendiente ve que ya no vale
+  esperandoCarpeta = new Map();
+  entregas = {};        // qué se ha guardado o entregado de la sesión activa (entregas.json, solo local)
 
   get sesion() { return game.settings.get(ID, "sesion"); }
   get ruta() { return [RAIZ, this.sesion.id, game.user.id]; }
@@ -101,13 +110,24 @@ class Chronicle {
     return Object.keys(CANALES).filter(c => canales[c]);
   }
 
+  /** ¿Graba este cliente las pistas de Foundry? Solo el máster que preparó la sesión. */
+  get soyGrabadorFoundry() {
+    const s = this.sesion;
+    return s?.grabadorFoundry ? s.grabadorFoundry === game.user.id : game.user.isGM;
+  }
+
   async preparar(nombre, canales) {
     const fecha = new Date();
     const pad = n => String(n).padStart(2, "0");
     const slug = (nombre || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
       .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    const id = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}-${pad(fecha.getHours())}${pad(fecha.getMinutes())}${slug ? `-${slug}` : ""}`;
-    await game.settings.set(ID, "sesion", { id, nombre: nombre || id, fase: "preparada", canales, inicioServerMs: null, finServerMs: null });
+    // Con un sufijo al azar: dos sesiones con el mismo nombre en el mismo minuto no pueden compartir carpeta.
+    const unico = crypto.randomUUID().slice(0, 4);
+    const id = `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}-${pad(fecha.getHours())}${pad(fecha.getMinutes())}${slug ? `-${slug}` : ""}-${unico}`;
+    await game.settings.set(ID, "sesion", {
+      id, nombre: nombre || id, fase: "preparada", canales, grabadorFoundry: game.user.id,
+      inicioServerMs: null, finServerMs: null
+    });
   }
 
   async elegirCanales(canales) {
@@ -136,13 +156,18 @@ class Chronicle {
     if (!s) {
       this.quitarCuenta();
       await this.detenerTodo();
-      this.manifiesto = null;
+      this.soltarMicro();
+      Object.assign(this, { manifiesto: null, entregas: {}, pausaPropia: false, entrega: null });
+      this.estados.clear();
       return this.refrescar();
     }
     if (this.manifiesto?.sesion.id !== s.id) {
       await this.detenerTodo();
+      this.soltarMicro();
       this.manifiesto = await leerJSON(this.ruta, "manifiesto.json");
-      this.entrega = null;
+      this.entregas = await leerJSON(this.ruta, "entregas.json") ?? {};
+      Object.assign(this, { pausaPropia: false, entrega: null, error: null });
+      this.estados.clear();
     }
     const acepto = this.manifiesto?.consentimiento.grabar;
 
@@ -198,10 +223,15 @@ class Chronicle {
     this.refrescar();
   }
 
-  async retirar() {
-    await this.detenerTodo();
+  /** Cierra el micro aunque nunca haya llegado a grabar (preparado para el medidor). */
+  soltarMicro() {
     this.micro?.soltar();
     this.micro = null;
+  }
+
+  async retirar() {
+    await this.detenerTodo();
+    this.soltarMicro();
     if (this.manifiesto) {
       await this.guardarManifiesto({ consentimiento: { grabar: false, publicar: false, fecha: new Date().toISOString() } });
     }
@@ -225,18 +255,56 @@ class Chronicle {
     this.refrescar();
   }
 
+  /** Siguiente tramo: el mayor que haya en el manifiesto o en los archivos, más uno. */
+  async siguienteTramo() {
+    const archivos = await listar(this.ruta).catch(() => []);
+    const enArchivos = Math.max(0, ...archivos.map(a => Number(a.nombre.match(TRAMO)?.[1] ?? 0)));
+    return Math.max(this.manifiesto?.tramos ?? 0, enArchivos) + 1;
+  }
+
+  /** Una sola pestaña puede grabar a la vez por usuario y mundo (Web Locks). */
+  async tomarCandado() {
+    if (!navigator.locks || this.soltarCandado) return true;
+    return new Promise(resolve => {
+      navigator.locks.request(`${ID}-${game.world?.id}-${game.user.id}`, { ifAvailable: true }, candado => {
+        if (!candado) return resolve(false);
+        resolve(true);
+        return new Promise(r => { this.soltarCandado = r; });
+      });
+    });
+  }
+
+  liberarCandado() {
+    this.soltarCandado?.();
+    this.soltarCandado = null;
+  }
+
   async empezarTramo() {
     // Nunca una grabación encima de otra: la anterior quedaría grabando sin control.
     if (this.ocupado || this.grabando || this.problemaNavegador) return;
     this.ocupado = true;
+    const op = ++this.operacion;
+    const sesionId = this.sesion?.id;
+    // Tras cada espera se comprueba que nadie haya parado, retirado o cambiado de sesión.
+    const vigente = () => op === this.operacion && this.sesion?.id === sesionId
+      && ["grabando", "pausada"].includes(this.sesion?.fase) && Boolean(this.manifiesto?.consentimiento.grabar);
     try {
-      const tramo = (this.manifiesto?.tramos ?? 0) + 1;
+      if (!(await this.tomarCandado())) {
+        this.error = "Ya estás grabando esta sesión en otra pestaña o ventana. Usa solo una: cierra las demás.";
+        return;
+      }
+      const tramo = await this.siguienteTramo();
       if (!this.micro) await this.probarMicro(localStorage.getItem(`${ID}.micro`) || undefined);
-      if (!this.micro) return;
+      if (!this.micro || !vigente()) return;
 
       const iniciar = async p => {
         const prefijo = `${p.tipo}-${tramo}`;
         await p.iniciar(this.ruta, prefijo);
+        if (!vigente()) {
+          await p.detener?.();
+          if (p === this.micro) this.micro = null; // detener() lo ha soltado
+          return;
+        }
         p.alCambiar = () => this.refrescar();
         this.pistas.push(p);
         await this.guardarManifiesto({
@@ -249,18 +317,25 @@ class Chronicle {
       // La voz, siempre ya.
       this.pistas = [];
       await iniciar(this.micro);
+      if (!this.grabando) return;
 
       // Las pistas de Foundry, cuando su audio esté disponible: Foundry lo desbloquea con el
       // primer clic en la página, y la voz no puede quedarse esperando a eso.
-      const canales = game.user.isGM ? this.canalesFoundry : [];
+      const canales = this.soyGrabadorFoundry ? this.canalesFoundry : [];
       if (canales.length) {
         if (canales.includes("musica")) {
-          this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), ...e }).catch(() => {}));
+          this.soltarMusica = registrarMusica(e => anadirLinea(this.ruta, "musica.txt", { serverMs: ahora(), epochMs: Date.now(), ...e }).catch(() => {}));
         }
         const foundry = async () => {
-          if (!this.grabando) return; // se paró mientras tanto
-          try { for (const p of await pistasFoundry(canales)) await iniciar(p); }
-          catch (error) { this.error = `No se pudo grabar la música de Foundry: ${error.message}`; }
+          if (!vigente()) return; // se paró mientras tanto
+          try {
+            const pistas = await pistasFoundry(canales);
+            for (const p of pistas) {
+              if (vigente()) await iniciar(p);
+              else p.soltar();
+            }
+            if (pistas.faltan.length) this.error = `Foundry no deja grabar: ${pistas.faltan.map(c => CANALES[c].toLowerCase()).join(", ")}. El resto sí se graba.`;
+          } catch (error) { this.error = `No se pudo grabar el audio de Foundry: ${error.message}`; }
           this.refrescar();
         };
         if (game.audio.locked) {
@@ -273,18 +348,23 @@ class Chronicle {
       console.error(error);
     } finally {
       this.ocupado = false;
+      if (!this.grabando) this.liberarCandado();
       this.refrescar();
     }
   }
 
   async detenerTodo() {
+    this.operacion++; // cualquier inicio en curso deja de valer
     this.soltarMusica?.();
     this.soltarMusica = null;
-    const habia = this.pistas.length;
-    await Promise.all(this.pistas.map(p => p.detener()));
+    const pistas = this.pistas;
     this.pistas = [];
-    this.micro = null; // detener() ya soltó el micro
-    if (habia && this.manifiesto) await this.guardarManifiesto({ estado: "finalizada" });
+    const confirmados = await Promise.all(pistas.map(p => p.detener?.() ?? true));
+    if (pistas.includes(this.micro)) this.micro = null; // detener() ya soltó el micro
+    this.liberarCandado();
+    if (pistas.length && this.manifiesto) {
+      await this.guardarManifiesto({ estado: confirmados.every(Boolean) ? "finalizada" : "cierre-sin-confirmar" }).catch(() => {});
+    }
   }
 
   pausar(pausa) {
@@ -294,15 +374,16 @@ class Chronicle {
     this.refrescar();
   }
 
+  /** La pausa del máster («Pausar a todos») afecta a todo; la propia, solo a la voz. */
   aplicarPausa() {
-    const pausa = this.pausaPropia || this.sesion?.fase === "pausada";
-    for (const p of this.pistas) p.pausar(pausa);
+    const global = this.sesion?.fase === "pausada";
+    for (const p of this.pistas) p.pausar(global || (this.pausaPropia && p.tipo === "voz"));
   }
 
   /** tipo: momento | cortar | pausa | reanuda */
   async marcar(tipo, texto = "") {
     if (!this.grabando) return ui.notifications.warn("MR · Chronicle: no estás grabando.");
-    await anadirLinea(this.ruta, "marcadores.txt", { serverMs: ahora(), tipo, texto });
+    await anadirLinea(this.ruta, "marcadores.txt", { serverMs: ahora(), epochMs: Date.now(), tipo, texto }).catch(() => {});
     if (["momento", "cortar"].includes(tipo)) ui.notifications.info(tipo === "cortar" ? "Marcado para cortar." : "Momento marcado.");
   }
 
@@ -321,47 +402,78 @@ class Chronicle {
 
   // ─── Entrega ────────────────────────────────────────────────────────────
 
-  async entregar(modo) {
-    const progreso = (hechos, total) => { this.entrega = { hechos, total }; this.refrescar(); };
-    this.entrega = { hechos: 0, total: 0 };
+  /**
+   * @param {"subir"|"zip"} modo
+   * @param {string} [sesionId]  por defecto la sesión activa; la copia .zip vale para cualquiera guardada aquí
+   */
+  async entregar(modo, sesionId = this.sesion?.id) {
+    if (!sesionId || this.entrega?.enCurso) return;
+    const rutaLocal = [RAIZ, sesionId, game.user.id];
+    const progreso = (hechos, total) => { this.entrega = { sesionId, modo, hechos, total, enCurso: true }; this.refrescarPanel(); };
+    this.entrega = { sesionId, modo, hechos: 0, total: 0, enCurso: true };
+    this.refrescarPanel();
     try {
-      const total = modo === "descargar"
-        ? await descargar({ rutaLocal: this.ruta, sesionId: this.sesion.id, carpeta: game.user.name.replace(/[\\/:*?"<>|]/g, "-"), progreso })
-        : await subir({ rutaLocal: this.ruta, sesionId: this.sesion.id, userId: game.user.id, progreso, pedirCarpeta: () => this.pedirCarpeta() });
-      this.entrega = { hechos: total, total, fin: modo };
-      await this.guardarManifiesto({ entregado: modo });
+      const carpeta = nombreArchivo(game.user);
+      const total = modo === "zip"
+        ? await guardarCopia({ rutaLocal, sesionId, carpeta, nombreArchivo: `MR-Chronicle_${sesionId}_${carpeta}.zip`, progreso })
+        : await subir({ rutaLocal, sesionId, userId: game.user.id, progreso, pedirCarpeta: () => this.pedirCarpeta(sesionId) });
+      this.entrega = { sesionId, modo, hechos: total, total, fin: modo };
+      // Se apunta aparte: si se cambiara el manifiesto, ya no coincidiría con el entregado.
+      const entregas = { ...(await leerJSON(rutaLocal, "entregas.json")), [modo]: new Date().toISOString() };
+      await escribirJSON(rutaLocal, "entregas.json", entregas).catch(() => {});
+      if (sesionId === this.sesion?.id) this.entregas = entregas;
     } catch (error) {
-      if (error.name === "AbortError") this.entrega = null;
-      else this.entrega = { ...this.entrega, error: error.message };
+      this.entrega = error.name === "AbortError" ? null : { sesionId, modo, ...this.entrega, enCurso: false, error: error.message };
     }
     this.refrescar();
   }
 
-  pedirCarpeta() {
-    const { id } = this.sesion;
+  pedirCarpeta(id) {
     if (game.user.isGM) return crearCarpetas(id, game.user.id);
-    if (!game.users.activeGM) throw new Error("El máster tiene que estar conectado para crear tu carpeta en el servidor. Si no puede, usa «Descargar».");
+    if (!game.users.activeGM) throw new Error("El máster tiene que estar conectado para crear tu carpeta en el servidor. Si no puede, guarda la copia (.zip).");
+    const peticion = crypto.randomUUID();
     return new Promise((resolve, reject) => {
-      const temporizador = setTimeout(() => reject(new Error("El máster no ha respondido. Prueba otra vez o usa «Descargar».")), 15000);
-      this.esperandoCarpeta = msg => {
+      const temporizador = setTimeout(() => { this.esperandoCarpeta.delete(peticion); reject(new Error("El máster no ha respondido. Prueba otra vez o guarda la copia (.zip).")); }, 15000);
+      this.esperandoCarpeta.set(peticion, msg => {
         clearTimeout(temporizador);
-        this.esperandoCarpeta = null;
+        this.esperandoCarpeta.delete(peticion);
         msg.error ? reject(new Error(msg.error)) : resolve();
-      };
-      this.emitir({ tipo: "carpeta", sesionId: id, userId: game.user.id });
+      });
+      this.emitir({ tipo: "carpeta", peticion, sesionId: id, userId: game.user.id });
     });
   }
 
-  async borrarLocal() {
+  async borrarLocal(sesionId = this.sesion?.id) {
+    if (!sesionId || (sesionId === this.sesion?.id && this.grabando)) return;
     const ok = await foundry.applications.api.DialogV2.confirm({
       window: { title: "Borrar grabación local" },
-      content: "<p>Se borrará de este navegador tu grabación de esta sesión. Hazlo solo si ya la has entregado.</p>"
+      content: "<p>Se borrará de este navegador tu grabación de esta sesión. Hazlo solo si ya la has guardado o entregado.</p>"
     });
     if (!ok) return;
-    await borrar(this.ruta);
-    this.manifiesto = null;
-    this.entrega = null;
+    await borrar([RAIZ, sesionId, game.user.id]);
+    if (sesionId === this.sesion?.id) Object.assign(this, { manifiesto: null, entrega: null });
     this.refrescar();
+  }
+
+  /** Grabaciones guardadas en este navegador, de cualquier sesión (también cerradas). */
+  async biblioteca() {
+    const lista = [];
+    let raiz;
+    try { raiz = await (await navigator.storage.getDirectory()).getDirectoryHandle(RAIZ); } catch { return lista; }
+    for await (const [sesionId, dir] of raiz.entries()) {
+      if (dir.kind !== "directory" || sesionId.startsWith("_")) continue;
+      const archivos = await listar([RAIZ, sesionId, game.user.id]).catch(() => null);
+      if (!archivos?.some(a => /\.(wav|ogg)$/.test(a.nombre))) continue;
+      const m = await leerJSON([RAIZ, sesionId, game.user.id], "manifiesto.json");
+      const entregas = await leerJSON([RAIZ, sesionId, game.user.id], "entregas.json") ?? {};
+      lista.push({
+        sesionId, nombre: m?.sesion?.nombre ?? sesionId,
+        mb: Math.round(archivos.reduce((t, a) => t + a.archivo.size, 0) / 1e6),
+        guardada: Boolean(entregas.zip), subida: Boolean(entregas.subir || m?.entregado === "subir"),
+        activa: sesionId === this.sesion?.id
+      });
+    }
+    return lista.sort((a, b) => b.sesionId.localeCompare(a.sesionId));
   }
 
   async hayLocal() {
@@ -373,18 +485,27 @@ class Chronicle {
   emitir(msg) { game.socket.emit(SOCKET, msg); }
 
   async alRecibir(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const usuarioValido = id => typeof id === "string" && game.users.has(id);
     if (msg.tipo === "estado") {
-      this.estados.set(msg.estado.userId, msg.estado);
+      const e = msg.estado;
+      // Solo estados de la sesión actual y de usuarios que existen; se guarda cuándo llegó.
+      if (!e || !usuarioValido(e.userId) || e.sesionId !== this.sesion?.id) return;
+      this.estados.set(e.userId, { ...e, recibido: performance.now() });
       this.panel?.refrescarMesa();
     } else if (msg.tipo === "hola") {
       this.emitirEstado();
     } else if (msg.tipo === "carpeta" && game.users.activeGM?.isSelf) {
+      // El máster crea carpetas con sus permisos: solo para la sesión activa y usuarios reales.
       let error = null;
-      try { await crearCarpetas(msg.sesionId, msg.userId); }
-      catch (e) { error = e.message; }
-      this.emitir({ tipo: "carpetaLista", userId: msg.userId, error });
+      if (msg.sesionId !== this.sesion?.id || !usuarioValido(msg.userId)) error = "Petición de carpeta no válida (¿sesión cerrada?). Guarda la copia (.zip).";
+      else {
+        try { await crearCarpetas(msg.sesionId, msg.userId); }
+        catch (e) { error = e.message; }
+      }
+      this.emitir({ tipo: "carpetaLista", peticion: msg.peticion, userId: msg.userId, error });
     } else if (msg.tipo === "carpetaLista" && msg.userId === game.user.id) {
-      this.esperandoCarpeta?.(msg);
+      this.esperandoCarpeta.get(msg.peticion)?.(msg);
     }
   }
 
@@ -392,17 +513,20 @@ class Chronicle {
     const voz = this.pistas.find(p => p.tipo === "voz");
     return {
       userId: game.user.id,
+      sesionId: this.sesion?.id ?? null,
       acepta: Boolean(this.manifiesto?.consentimiento.grabar),
       publica: Boolean(this.manifiesto?.consentimiento.publicar),
       micro: Boolean(this.micro),
       nivel: this.micro?.nivel ?? 0,
       grabando: this.grabando,
-      pausa: this.pausaPropia,
+      pausa: this.pausaPropia || this.sesion?.fase === "pausada",
+      cierreSinConfirmar: this.manifiesto?.estado === "cierre-sin-confirmar",
       segundos: voz?.segundos ?? 0,
       // Lo escrito de verdad en el disco: la prueba de que se está grabando.
       guardadoMB: Math.round(this.pistas.reduce((t, p) => t + (p.bytes ?? 0), 0) / 1e6),
       pistas: this.pistas.length,
-      entregado: this.manifiesto?.entregado ?? null,
+      entregado: this.entregas?.subir || this.manifiesto?.entregado === "subir" ? "subir"
+        : this.entregas?.zip ? "zip" : null,
       error: this.error ?? this.pistas.flatMap(p => p.errores ?? [])[0] ?? null,
       microEncendido: this.micro?.estadoMicro.encendido ?? false,
       captando: this.micro?.estadoMicro.captando ?? false,
@@ -413,7 +537,7 @@ class Chronicle {
   emitirEstado() {
     if (!this.sesion) return;
     const estado = this.miEstado;
-    this.estados.set(game.user.id, estado);
+    this.estados.set(game.user.id, { ...estado, recibido: performance.now() });
     this.emitir({ tipo: "estado", estado });
     this.indicador();
     this.panel?.refrescarMesa();
@@ -429,6 +553,10 @@ class Chronicle {
   refrescar() {
     this.emitirEstado();
     this.indicador();
+    this.refrescarPanel();
+  }
+
+  refrescarPanel() {
     if (this.panel?.rendered) this.panel.render();
   }
 
@@ -482,7 +610,7 @@ class Chronicle {
       el.addEventListener("click", () => this.abrirPanel());
       document.body.append(el);
     }
-    const pausa = this.pausaPropia || s?.fase === "pausada";
+    const pausa = this.miEstado.pausa;
     const acepto = this.manifiesto?.consentimiento.grabar;
     let estado = this.grabando ? (pausa ? "pausa" : "grabando") : s?.fase ?? "inactivo";
     // La sesión graba pero este equipo no (aún no aceptó, o espera un clic tras recargar).

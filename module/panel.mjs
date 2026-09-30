@@ -32,6 +32,25 @@ const PROBLEMAS = {
 const sinConsentimiento = () =>
   game.users.filter(u => u.active && !chronicle.estados.get(u.id)?.acepta);
 
+// Lo que cuesta consultar se guarda un rato: el panel se repinta a menudo.
+let micros = null;
+navigator.mediaDevices?.addEventListener?.("devicechange", () => { micros = null; });
+async function microsDisponibles() {
+  try { micros ??= (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput"); }
+  catch { micros = []; }
+  return micros;
+}
+let espacio = { gb: null, en: -Infinity };
+async function espacioLibreGB() {
+  if (performance.now() - espacio.en > 30_000) {
+    try {
+      const { quota, usage } = await navigator.storage.estimate();
+      espacio = { gb: Number(((quota - usage) / 1e9).toFixed(1)), en: performance.now() };
+    } catch { espacio = { gb: null, en: performance.now() }; }
+  }
+  return espacio.gb;
+}
+
 
 export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2)) {
   static MEMORIA = "panel";
@@ -52,8 +71,8 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       probar: Panel.#probar,
       pausarMia: (e, b) => chronicle.pausar(b.dataset.valor === "1"),
       marcar: Panel.#marcar,
-      entregar: (e, b) => chronicle.entregar(b.dataset.modo),
-      borrarLocal: () => chronicle.borrarLocal()
+      entregar: (e, b) => chronicle.entregar(b.dataset.modo, b.dataset.sesion || undefined),
+      borrarLocal: (e, b) => chronicle.borrarLocal(b.dataset.sesion || undefined)
     }
   };
 
@@ -62,23 +81,20 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     mesa: { template: `${RUTA}/mesa.hbs` }
   };
 
-  async _prepareContext() {
+  async _prepareContext(opciones) {
     const s = chronicle.sesion;
+    const base = { s, finalizada: s?.fase === "finalizada" };
+    // Si solo se repinta la lista de participantes, no hace falta nada más.
+    if (opciones.parts?.length && !opciones.parts.includes("principal")) return base;
+
     const yo = chronicle.miEstado;
-    let micros = [];
-    try {
-      micros = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
-    } catch { /* sin permisos todavía */ }
     const elegido = chronicle.micro?.deviceId ?? localStorage.getItem(`${ID}.micro`) ?? "";
     const e = chronicle.entrega;
-    let libreGB = null;
-    try {
-      const { quota, usage } = await navigator.storage.estimate();
-      libreGB = ((quota - usage) / 1e9).toFixed(1);
-    } catch { /* sin estimación */ }
+    const libreGB = await espacioLibreGB();
+    const biblioteca = await chronicle.biblioteca();
     return {
+      ...base,
       esGM: game.user.isGM,
-      s,
       faseTexto: FASES[s?.fase] ?? "",
       canales: Object.entries(CANALES).map(([id, nombre]) => ({
         id, nombre, marcado: s ? chronicle.canalesFoundry.includes(id) : Boolean(canalesRecordados()[id])
@@ -93,20 +109,21 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       })(),
       yo,
       manifiesto: chronicle.manifiesto,
-      micros: micros.map((d, i) => ({ id: d.deviceId, nombre: d.label || `Micrófono ${i + 1}`, elegido: d.deviceId === elegido })),
+      micros: (await microsDisponibles()).map((d, i) => ({ id: d.deviceId, nombre: d.label || `Micrófono ${i + 1}`, elegido: d.deviceId === elegido })),
       reloj: reloj(yo.segundos),
       fase: s?.fase,
       grabable: ["preparada", "grabando", "pausada"].includes(s?.fase),
-      finalizada: s?.fase === "finalizada",
-      hayLocal: await chronicle.hayLocal(),
+      actual: biblioteca.find(b => b.activa) ?? null,
+      otras: biblioteca.filter(b => !b.activa),
       puedeSubir: game.user.can("FILES_UPLOAD"),
+      // Con el túnel rápido la dirección cambia cada vez: lo que no se guarde ahora no se ve después.
+      direccionCambiante: location.hostname.endsWith("trycloudflare.com"),
       entrega: e && {
         ...e,
-        porcentaje: e.total ? Math.round((100 * e.hechos) / e.total) : 0,
-        enCurso: !e.fin && !e.error
+        porcentaje: e.total ? Math.round((100 * e.hechos) / e.total) : 0
       },
       libreGB,
-      pocoEspacio: libreGB !== null && libreGB < 3
+      pocoEspacio: libreGB !== null && libreGB < (chronicle.soyGrabadorFoundry && chronicle.canalesFoundry.length ? 3 : 2)
     };
   }
 
@@ -115,11 +132,14 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     contexto.participantes = game.users.filter(u => u.active).map(u => {
       const e = chronicle.estados.get(u.id);
       let clase = "gris", texto = "Sin respuesta";
-      if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
+      // Un estado viejo no es prueba de que siga grabando.
+      if (e && !u.isSelf && performance.now() - e.recibido > 10_000) [clase, texto] = ["gris", "Sin comunicación"];
+      else if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
       else if (e?.error) [clase, texto] = ["rojo", e.error];
       else if (e?.grabando && !e.microEncendido) [clase, texto] = ["ambar", `Grabando · ${reloj(e.segundos ?? 0)} · micro apagado`];
       else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${reloj(e.segundos ?? 0)}`] : ["verde", `Grabando · ${reloj(e.segundos ?? 0)} · ${e.guardadoMB ?? 0} MB`];
-      else if (e?.entregado) [clase, texto] = ["verde", "Entregado"];
+      else if (e?.cierreSinConfirmar) [clase, texto] = ["ambar", "Cierre sin confirmar: que guarde la copia (.zip)"];
+      else if (e?.entregado) [clase, texto] = ["verde", e.entregado === "subir" ? "Entregado" : "Copia guardada"];
       else if (e?.acepta && contexto.finalizada) [clase, texto] = ["ambar", "Falta entregar"];
       else if (e?.acepta) [clase, texto] = e.micro ? ["verde", "Listo"] : ["ambar", "Aceptó · sin micro"];
       else if (e) [clase, texto] = ["ambar", "Falta consentimiento"];
@@ -137,47 +157,50 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     this.render({ parts: ["mesa"] });
   }
 
+  /** Una sola vez: los cambios de las casillas de canales se escuchan en el formulario. */
+  async _onFirstRender(contexto, opciones) {
+    await super._onFirstRender?.(contexto, opciones);
+    this.element.addEventListener("change", evento => {
+      if (!evento.target.name?.startsWith("canal-") || chronicle.sesion?.fase !== "preparada") return;
+      const canales = Object.fromEntries(Object.keys(CANALES).map(c =>
+        [c, this.element.querySelector(`[name='canal-${c}']`)?.checked ?? false]));
+      try { localStorage.setItem(CLAVE_CANALES, JSON.stringify(canales)); } catch { /* sin almacenamiento */ }
+      chronicle.elegirCanales(canales);
+    });
+  }
+
   async _onRender(contexto, opciones) {
     await super._onRender(contexto, opciones);
+    // El medidor solo depende de la parte principal.
+    if (opciones.parts?.length && !opciones.parts.includes("principal")) return;
     clearInterval(this.medidor);
     const barra = this.element.querySelector(".mrc-nivel > span");
     const tiempo = this.element.querySelector("[data-mrc-reloj]");
     const guardado = this.element.querySelector("[data-mrc-guardado]");
     const micro = this.element.querySelector("[data-mrc-micro]");
-
-    // Pistas de Foundry: con la sesión preparada, cada casilla se guarda al momento.
-    if (chronicle.sesion?.fase === "preparada") {
-      for (const casilla of this.element.querySelectorAll("input[name^='canal-']")) {
-        casilla.addEventListener("change", () => {
-          const canales = Object.fromEntries(Object.keys(CANALES).map(c =>
-            [c, this.element.querySelector(`[name='canal-${c}']`)?.checked ?? false]));
-          try { localStorage.setItem(CLAVE_CANALES, JSON.stringify(canales)); } catch { /* sin almacenamiento */ }
-          chronicle.elegirCanales(canales);
-        });
+    if (!barra && !tiempo && !micro) return;
+    const poner = (el, texto) => { if (el && el.textContent !== texto) el.textContent = texto; };
+    let ciclo = 0;
+    this.medidor = setInterval(() => {
+      const nivel = chronicle.micro?.nivel ?? 0;
+      if (barra) {
+        barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
+        barra.dataset.saturado = nivel > 0.98;
       }
-    }
-    if (barra || tiempo || micro) {
-      this.medidor = setInterval(() => {
-        const nivel = chronicle.micro?.nivel ?? 0;
-        if (barra) {
-          barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
-          barra.dataset.saturado = nivel > 0.98;
-        }
-        // Reloj y MB guardados en vivo, sin repintar el panel.
-        const yo = chronicle.miEstado;
-        if (tiempo) tiempo.textContent = reloj(yo.segundos);
-        if (guardado) guardado.textContent = `${yo.guardadoMB} MB guardados en este ordenador`;
-        if (micro) {
-          const estado = !chronicle.micro ? "apagado" : !yo.microEncendido ? "apagado" : yo.captando ? "capta" : "silencio";
-          micro.dataset.estado = estado;
-          micro.textContent = {
-            capta: "Micro encendido · captando sonido",
-            silencio: "Micro encendido · no capta nada ahora mismo",
-            apagado: chronicle.micro ? "Micro apagado o desconectado: al volver a conectarlo, se engancha solo" : "Micro sin abrir: pulsa «Probar micro»"
-          }[estado];
-        }
-      }, 60);
-    }
+      if (++ciclo % 8) return; // los textos cambian despacio: cada ~0,5 s basta
+      const yo = chronicle.miEstado;
+      poner(tiempo, reloj(yo.segundos));
+      poner(guardado, `${yo.guardadoMB} MB guardados en este ordenador`);
+      if (micro) {
+        const estado = !chronicle.micro ? "apagado" : !yo.microEncendido ? "apagado" : yo.captando ? "capta" : "silencio";
+        micro.dataset.estado = estado;
+        poner(micro, {
+          capta: "Micro encendido · captando sonido",
+          silencio: "Micro encendido · no capta nada ahora mismo",
+          apagado: chronicle.micro ? "Micro apagado o desconectado: al volver a conectarlo, se engancha solo" : "Micro sin abrir: pulsa «Probar micro»"
+        }[estado]);
+      }
+    }, 60);
   }
 
   async close(opciones) {

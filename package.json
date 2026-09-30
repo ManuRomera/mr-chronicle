@@ -1,6 +1,6 @@
 {
   "name": "mr-chronicle",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "MR · Chronicle: grabación multipista de partidas de Foundry VTT para podcast.",
@@ -8,7 +8,7 @@
     "mr-chronicle-post": "herramientas/post/mr-chronicle-post.mjs"
   },
   "scripts": {
-    "test": "node --test herramientas/post/test/*.test.mjs",
+    "test": "node --test herramientas/post/test/*.test.mjs test/*.test.mjs",
     "post": "node herramientas/post/mr-chronicle-post.mjs",
     "herramientas": "rm -rf dist/h && mkdir -p dist/h/MR-Chronicle-herramientas && cp -R herramientas/post herramientas/instalar herramientas/servidor herramientas/LEEME.md docs/MANUAL.md prompts/cronica.md dist/h/MR-Chronicle-herramientas/ && rm -rf dist/h/MR-Chronicle-herramientas/post/test && (cd dist/h && zip -qr ../MR-Chronicle-herramientas.zip MR-Chronicle-herramientas) && rm -rf dist/h && echo dist/MR-Chronicle-herramientas.zip"
   },

@@ -64,7 +64,7 @@ Sin instalar nada para jugar y sin coste.
 | Entregas en un servidor Foundry | `<carpeta de datos de Foundry>/Data/mr-chronicle/<sesión>/<usuario>/` |
 | Foundry en Windows (carpeta de datos por defecto) | `%LOCALAPPDATA%\FoundryVTT\Data\` |
 | Resultado de procesar una sesión | `<carpeta de la sesión>/salida/` |
-| **La grabación mientras se juega** | Dentro del navegador de cada uno (almacenamiento privado del navegador). No es una carpeta visible: se saca con **Entregar** o **Descargar**. |
+| **La grabación mientras se juega** | Dentro del navegador de cada uno (almacenamiento privado del navegador), ligada a la dirección exacta de Foundry. No es una carpeta visible: se saca con **Guardar copia (.zip)** o **Entregar al servidor**. |
 
 ### Qué hay dentro de una entrega
 
@@ -121,7 +121,7 @@ Para actualizar: Foundry avisa cuando hay versión nueva, en la pantalla de mód
 
 ## 4. Configuración del máster (una sola vez)
 
-1. **Permisos de subida** (solo si vais a entregar al servidor de Foundry): **Configuración** → **Configurar permisos** → marca **Subir archivos** y **Explorar archivos** para el rol **Jugador**. Sin esto, los jugadores tendrán que usar **Descargar**.
+1. **Permisos de subida** (solo si vais a entregar al servidor de Foundry): **Configuración** → **Configurar permisos** → marca **Subir archivos** y **Explorar archivos** para el rol **Jugador**. Sin esto, los jugadores usarán **Guardar copia (.zip)**.
 2. **Contraseñas:** si vas a usar el túnel o un servidor en Internet, **pon contraseña a todos los usuarios**, sobre todo al máster (**Configuración** → **Usuarios**).
 3. **Proxy:** solo si Foundry va detrás de nginx. Pon `client_max_body_size 16m;` o fallarán las entregas. Con Caddy, con el túnel o sin proxy, no hace falta nada.
 
@@ -222,7 +222,7 @@ Botones del panel:
 |---|---|
 | **★ Marcar momento** (o `Ctrl+Shift+M`) | Deja una marca para la edición. Puedes escribir antes un texto en *Marcador*. |
 | **✂ Cortar esto** | Avisa de que ese momento no debe publicarse. Sale en el informe. |
-| **❚❚ Pausar mi micro** | Graba silencio hasta que pulses **▶ Reanudar mi micro**. |
+| **❚❚ Pausar mi micro** | Graba silencio en tu voz hasta que pulses **▶ Reanudar mi micro**. Si eres el máster, la música y los efectos de Foundry siguen grabándose (para pararlo todo, **Pausar a todos**). |
 | **Retirar mi consentimiento…** | Deja de grabarte en ese momento. |
 | **❚❚ Pausar a todos** (máster) | Pausa todas las grabaciones. |
 
@@ -234,28 +234,32 @@ La lista **En la mesa** muestra el estado de cada uno, con su tiempo y sus MB. E
 
 ---
 
-## 8. Al acabar: entregar las grabaciones
+## 8. Al acabar: guardar y entregar las grabaciones
 
-En el panel, sección **Entregar tu grabación**. Hay dos formas.
+En el panel, sección **Guarda y entrega tu grabación**. **Guarda siempre la copia (.zip)**; entregar al servidor es opcional.
 
-### Entregar (al servidor de Foundry)
+### Guardar copia (.zip) — la recomendada
 
-- Pulsa **Entregar**. Sube la grabación trozo a trozo, y el máster tiene que estar conectado.
-- Si se corta, vuelve a pulsar: solo sube lo que falte.
+1. Pulsa **Guardar copia (.zip)** y elige dónde guardarla. Se crea un único archivo, `MR-Chronicle_<sesión>_<tu nombre>.zip`, con toda tu grabación (sin comprimir: ocupa lo mismo que la grabación).
+2. **Súbelo a la carpeta compartida del grupo** (Google Drive, MEGA, Dropbox…) arrastrándolo a su web, o guárdalo directamente en la carpeta que sincroniza su programa de escritorio.
+3. Quien procese la sesión deja todos los .zip en una carpeta y los usa **tal cual**, sin descomprimirlos. Dentro va un inventario con el tamaño y la comprobación de cada archivo: la postproducción avisa si falta algo o está dañado.
+
+**Hazlo nada más acabar la partida**, y más aún con el túnel de Cloudflare: el navegador solo te enseña la grabación desde la misma dirección en la que se hizo, y la del túnel cambia cada vez. El panel lo recuerda con un aviso.
+
+### Entregar al servidor de Foundry
+
+- Pulsa **Entregar al servidor**. Sube la grabación trozo a trozo, y el máster tiene que estar conectado.
+- Cada archivo se da por entregado solo si en el servidor tiene exactamente el mismo tamaño. Si se corta, vuelve a pulsar: solo sube lo que falte.
 - Queda en `Data/mr-chronicle/<sesión>/<usuario>/` del servidor.
 - Tiempo: 1,4 GB con 10 Mbps de subida son unos 20 minutos.
 
-### Descargar (a una carpeta compartida: Drive, MEGA o Dropbox)
+### Grabaciones en este navegador
 
-1. Crea una carpeta compartida del grupo y que cada uno la tenga sincronizada en su ordenador (Google Drive para escritorio, MEGAsync o Dropbox).
-2. Pulsa **Descargar** y elige esa carpeta. Se crea `<sesión>/<tu nombre>/` y se sube sola.
-3. Si no tienes el programa de sincronización, descarga en cualquier carpeta y arrástrala a la web de Drive o MEGA, dentro de la carpeta de la sesión.
-
-En Mac, puede que Chrome no deje elegir la carpeta de Google Drive, que vive en `~/Library/CloudStorage`. En ese caso, descarga en Descargas y arrástrala a la web.
+Aunque el máster cierre la sesión, o volváis otro día con una sesión nueva, el panel muestra **Grabaciones en este navegador**, con cada sesión guardada, su tamaño y si ya tiene copia. Desde ahí se puede **Guardar copia** de cualquiera y **Borrar** las que ya estén guardadas o entregadas.
 
 ### Después
 
-Cuando la sesión esté procesada, cada uno pulsa **Borrar la grabación de este navegador** para liberar espacio. **Hasta entregar, no borres los datos del navegador.**
+Cuando la sesión esté procesada, cada uno puede borrar su grabación del navegador para liberar espacio. **Hasta tener la copia guardada, no borres los datos del navegador.**
 
 ---
 
@@ -385,9 +389,9 @@ node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> --salida <otra-ca
 | **Micro encendido · no capta nada ahora mismo** | Si hablas y no cambia: micro silenciado o mal elegido. |
 | **La pista de … no se está guardando en el disco** | Probablemente, disco lleno. Libera espacio y avisa al máster. |
 | **El navegador está procesando tu micro…** | Tu sistema aplica filtros al micro (en Mac, desactiva «Aislamiento de voz» en el Centro de control). |
-| **Tu rol no puede subir archivos** | El máster tiene que activar el permiso (ver [sección 4](#4-configuración-del-máster-una-sola-vez)), o usa **Descargar**. |
+| **Tu rol no puede subir archivos** | El máster tiene que activar el permiso (ver [sección 4](#4-configuración-del-máster-una-sola-vez)), o guarda la copia (.zip). |
 | **En este navegador no hay ninguna grabación de esta sesión** | Grabaste en otro navegador u ordenador: entrega desde allí. |
-| **El máster tiene que estar conectado…** / **no ha respondido** | La entrega al servidor necesita al máster. Espera o usa **Descargar**. |
+| **El máster tiene que estar conectado…** / **no ha respondido** | La entrega al servidor necesita al máster. Espera o guarda la copia (.zip). |
 
 ### Situaciones
 

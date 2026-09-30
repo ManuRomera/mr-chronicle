@@ -18,10 +18,12 @@ export async function pistasFoundry(tipos) {
   await game.audio.unlock; // los contextos se crean con el primer gesto del usuario
   const propio = new AudioContext({ sampleRate: 48000, latencyHint: "playback" });
   const pistas = [];
+  pistas.faltan = []; // canales pedidos que no se han podido preparar: el panel lo dice
   for (const [tipo, nombre] of Object.entries(CONTEXTOS).filter(([t]) => tipos.includes(t))) {
     const ctx = game.audio[nombre];
     if (!ctx?.gainNode) {
       console.warn(`mr-chronicle | Foundry no expone game.audio.${nombre}.gainNode; no se grabará ${tipo}.`);
+      pistas.faltan.push(tipo);
       continue;
     }
     const puente = ctx.createMediaStreamDestination();
@@ -34,11 +36,19 @@ export async function pistasFoundry(tipos) {
     p.soltar = () => {
       soltar();
       try { ctx.gainNode.disconnect(puente); } catch { /* ya desconectado */ }
-      if (pistas.every(q => !q.grabando) && propio.state !== "closed") propio.close();
+      if (pistas.every(q => !q.grabando) && propio.state !== "closed") propio.close().catch(() => {});
     };
-    await p.preparar();
+    try { await p.preparar(); }
+    catch (error) {
+      // Si una falla, se deshace todo lo preparado: nada queda enganchado al audio de Foundry.
+      p.soltar();
+      for (const q of pistas) q.soltar();
+      if (propio.state !== "closed") propio.close().catch(() => {});
+      throw error;
+    }
     pistas.push(p);
   }
+  if (!pistas.length) propio.close().catch(() => {});
   return pistas;
 }
 

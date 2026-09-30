@@ -134,3 +134,7 @@
 #mr-chronicle-cuenta .mrc-cuenta-numero { font-size: 160px; font-weight: 700; line-height: 1; color: #ff5a52; }
 #mr-chronicle-cuenta .mrc-cuenta-nota { font-size: 18px; opacity: .85; }
 #mr-chronicle-cuenta[data-fase="ya"] .mrc-cuenta-numero { font-size: 72px; }
+
+.mr-chronicle .mrc-biblioteca { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.mr-chronicle .mrc-biblioteca li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
+.mr-chronicle .mrc-biblioteca .mrc-botones { grid-column: 1 / -1; }

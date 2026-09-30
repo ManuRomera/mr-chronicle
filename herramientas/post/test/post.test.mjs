@@ -125,7 +125,8 @@ test("alinea pistas con deriva, una recarga y un reinicio del servidor", () => {
   post(["--formato", "wav"]);
 
   const salida = path.join(raiz, "salida");
-  for (const [archivo, esperados] of [["voz-Ana.wav", clics], ["voz-Beto.wav", [10, 145, 290]]]) {
+  // Beto no autorizó publicar: su pista va aparte.
+  for (const [archivo, esperados] of [["voz-Ana.wav", clics], ["no-publicar/voz-Beto.wav", [10, 145, 290]]]) {
     const { ms, duracion } = clicsEn(path.join(salida, "stems", archivo));
     assert.equal(Math.round(duracion), DURACION, `${archivo} dura ${duracion}`);
     assert.equal(ms.length, esperados.length, `${archivo}: ${ms}`);
@@ -133,7 +134,7 @@ test("alinea pistas con deriva, una recarga y un reinicio del servidor", () => {
   }
   const informe = fs.readFileSync(path.join(salida, "informe.md"), "utf8");
   assert.match(informe, /Beto NO ha aceptado que se publique/);
-  assert.match(informe, /Beto voz-2: el servidor de Foundry se reinició/);
+  assert.match(informe, /Beto: el servidor de Foundry se reinició/);
   assert.match(informe, /00:03:20.*CORTAR/);
   assert.match(fs.readFileSync(path.join(salida, "marcadores.txt"), "utf8"), /^200\.000\t200\.000\tBeto: ✂ CORTAR/);
 
@@ -141,7 +142,8 @@ test("alinea pistas con deriva, una recarga y un reinicio del servidor", () => {
   fs.rmSync(salida, { recursive: true });
   post([]);
   const stems = fs.readdirSync(path.join(salida, "stems")).sort();
-  assert.deepEqual(stems, ["voz-Ana.flac", "voz-Beto.flac"]);
+  assert.deepEqual(stems, ["no-publicar", "voz-Ana.flac"]);
+  assert.deepEqual(fs.readdirSync(path.join(salida, "stems", "no-publicar")), ["voz-Beto.flac"]);
   const dura = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path.join(salida, "stems", "voz-Ana.flac")], { encoding: "utf8" });
   assert.equal(Math.round(Number(dura)), DURACION);
   fs.rmSync(raiz, { recursive: true });

@@ -7,7 +7,7 @@ Graba tus partidas de Foundry VTT como **podcast multipista**, sin instalar nada
 
 - Cada participante graba **su propio micro, en su navegador**, en bruto y a 48 kHz.
 - El máster graba además la **música, el ambiente y los efectos** de Foundry, cada uno en su pista.
-- Al acabar, cada uno **entrega** su grabación: al servidor de Foundry o a una carpeta compartida de Google Drive, MEGA o Dropbox.
+- Al acabar, cada uno **guarda una copia .zip** de su grabación (y la sube a la carpeta compartida del grupo: Drive, MEGA…) o la **entrega** al servidor de Foundry.
 - Una herramienta de **postproducción** corrige la deriva de reloj de cada tarjeta de sonido, alinea todas las pistas al mismo 0:00, limpia el ruido (DeepFilterNet) y transcribe con Whisper sabiendo quién dijo cada cosa.
 
 📖 **[Manual de instrucciones](docs/MANUAL.md)**, paso a paso. El diseño completo, con las decisiones y sus porqués, está en [docs/MR_Chronicle.md](docs/MR_Chronicle.md).
@@ -66,16 +66,18 @@ Después activa **MR · Chronicle** en el mundo (Gestionar módulos). Compatible
 4. Durante la partida:
    - **★ Marcar momento** (o `Ctrl+Shift+M`) deja una marca para la edición.
    - **✂ Cortar esto** avisa de algo que no debe publicarse.
-   - **Pausar mi micro** graba silencio mientras dure.
-5. El máster pulsa **Finalizar**. Cada uno entrega su grabación de una de estas dos formas:
-   - **Entregar:** la sube al servidor de Foundry. Si se corta, se vuelve a pulsar y solo sube lo que falte.
-   - **Descargar:** la guarda en la carpeta que elija. Si todos eligen la **carpeta compartida del grupo** en Google Drive, MEGA o Dropbox (la que sincroniza su ordenador), las grabaciones se juntan solas en `<sesión>/<nombre>/`, y cualquiera del grupo puede procesarlas.
+   - **Pausar mi micro** graba silencio en tu voz mientras dure (la música de Foundry sigue; para todo, **Pausar a todos**).
+5. El máster pulsa **Finalizar**. Cada uno, **nada más acabar**:
+   - **Guardar copia (.zip):** un único archivo con su grabación, que sube a la carpeta compartida del grupo. Quien procesa los usa tal cual. Imprescindible con el túnel, cuya dirección cambia: el navegador solo enseña la grabación desde la dirección en la que se hizo.
+   - **Entregar al servidor** (opcional): la sube a Foundry trozo a trozo, comprobando el tamaño de cada archivo. Si se corta, se vuelve a pulsar y solo sube lo que falte.
+
+El panel guarda la lista de **Grabaciones en este navegador**: aunque se cierre la sesión, se puede guardar la copia de cualquiera más tarde (desde la misma dirección de Foundry). Solo puede grabar una pestaña a la vez por persona.
 
 Si alguien recarga o cierra el navegador a mitad, lo ya grabado está a salvo. Al volver a entrar, la grabación sigue en cuanto hace clic en la mesa. Junto a la grabación, el panel indica si el micro está encendido y si capta sonido. Si se desconecta, la grabación sigue (en silencio) y el micro se engancha solo al volver a conectarlo. Si la grabación deja de guardarse en el disco, sale una alerta roja, y el máster lo ve en la lista de la mesa.
 
 ### Configuración del máster (una sola vez)
 
-- **Configurar permisos → Subir archivos** (y **Explorar archivos**): actívalo para el rol **Jugador**. Sin eso, los jugadores tendrán que usar **Descargar** y enviarte la carpeta.
+- **Configurar permisos → Subir archivos** (y **Explorar archivos**): actívalo para el rol **Jugador**. Sin eso, los jugadores usarán **Guardar copia (.zip)**.
 - Si Foundry va detrás de un proxy (nginx, Cloudflare…), debe aceptar peticiones de al menos 16 MB (`client_max_body_size 16m` en nginx).
 - Durante la entrega el máster tiene que estar conectado: es quien crea la carpeta de cada jugador en el servidor.
 
