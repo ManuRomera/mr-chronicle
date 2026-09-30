@@ -18,7 +18,7 @@ jobs:
       - name: Empaquetar
         run: |
           mkdir -p dist
-          zip -r dist/mr-chronicle.zip module.json mr-chronicle.mjs module workers templates styles docs prompts herramientas LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md -x 'herramientas/post/test/*'
+          zip -r dist/mr-chronicle.zip module.json mr-chronicle.mjs module workers templates styles docs prompts herramientas LICENSE README.md CHANGELOG.md THIRD_PARTY_NOTICES.md -x 'herramientas/post/test/*' 'docs/imagenes/*'
           cp module.json dist/module.json
           npm run -s herramientas
       - name: Notas de la versión

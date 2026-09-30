@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 210" role="img" aria-labelledby="t d">
+  <title id="t">Flujo de MR · Chronicle</title>
+  <desc id="d">Cinco pasos: el máster prepara la sesión, todos aceptan, el máster inicia y todos graban a la vez, cada uno guarda su copia .zip, y cualquiera del grupo procesa las grabaciones.</desc>
+  <defs>
+    <marker id="f" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8579"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #24221f; }
+      .quien { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: #d4705a; }
+      .titulo { font-size: 17px; font-weight: 700; }
+      .txt { font-size: 13px; fill: #45413b; }
+      .num { font-size: 13px; font-weight: 700; fill: #fff; }
+    </style>
+  </defs>
+  <rect width="940" height="210" rx="14" fill="#f6f4ef"/>
+
+  <g id="pasos" stroke="#d9d4c7" stroke-width="1.5" fill="#fff">
+    <rect x="18"  y="28" width="160" height="150" rx="10"/>
+    <rect x="202" y="28" width="160" height="150" rx="10"/>
+    <rect x="386" y="28" width="160" height="150" rx="10"/>
+    <rect x="570" y="28" width="160" height="150" rx="10"/>
+    <rect x="754" y="28" width="168" height="150" rx="10"/>
+  </g>
+
+  <g stroke="#8a8579" stroke-width="2" marker-end="url(#f)">
+    <line x1="180" y1="103" x2="200" y2="103"/>
+    <line x1="364" y1="103" x2="384" y2="103"/>
+    <line x1="548" y1="103" x2="568" y2="103"/>
+    <line x1="732" y1="103" x2="752" y2="103"/>
+  </g>
+
+  <g>
+    <circle cx="34"  cy="28" r="13" fill="#d4705a"/><text class="num" x="34"  y="33" text-anchor="middle">1</text>
+    <circle cx="218" cy="28" r="13" fill="#d4705a"/><text class="num" x="218" y="33" text-anchor="middle">2</text>
+    <circle cx="402" cy="28" r="13" fill="#d4705a"/><text class="num" x="402" y="33" text-anchor="middle">3</text>
+    <circle cx="586" cy="28" r="13" fill="#d4705a"/><text class="num" x="586" y="33" text-anchor="middle">4</text>
+    <circle cx="770" cy="28" r="13" fill="#d4705a"/><text class="num" x="770" y="33" text-anchor="middle">5</text>
+  </g>
+
+  <g>
+    <text class="quien" x="34" y="62">Máster</text>
+    <text class="titulo" x="34" y="85">Preparar</text>
+    <text class="txt" x="34" y="110">Elige qué pistas de</text>
+    <text class="txt" x="34" y="128">Foundry se graban</text>
+    <text class="txt" x="34" y="146">(música, ambiente,</text>
+    <text class="txt" x="34" y="164">efectos).</text>
+
+    <text class="quien" x="218" y="62">Todos</text>
+    <text class="titulo" x="218" y="85">Aceptar</text>
+    <text class="txt" x="218" y="110">Eligen micro, aceptan</text>
+    <text class="txt" x="218" y="128">grabar (y publicar) y</text>
+    <text class="txt" x="218" y="146">pulsan «Guardar».</text>
+    <text class="txt" x="218" y="164">Nada más.</text>
+
+    <text class="quien" x="402" y="62">Máster</text>
+    <text class="titulo" x="402" y="85">Grabar</text>
+    <text class="txt" x="402" y="110">Pulsa «Iniciar». Cuenta</text>
+    <text class="txt" x="402" y="128">atrás de 5 s en todas</text>
+    <text class="txt" x="402" y="146">las pantallas y todos</text>
+    <text class="txt" x="402" y="164">graban a la vez.</text>
+
+    <text class="quien" x="586" y="62">Todos</text>
+    <text class="titulo" x="586" y="85">Guardar copia</text>
+    <text class="txt" x="586" y="110">Cada uno guarda un</text>
+    <text class="txt" x="586" y="128">archivo .zip y lo sube</text>
+    <text class="txt" x="586" y="146">a la carpeta del grupo</text>
+    <text class="txt" x="586" y="164">(Drive, MEGA…).</text>
+
+    <text class="quien" x="770" y="62">Quien procese</text>
+    <text class="titulo" x="770" y="85">Procesar</text>
+    <text class="txt" x="770" y="110">Alinea las pistas,</text>
+    <text class="txt" x="770" y="128">limpia el ruido y</text>
+    <text class="txt" x="770" y="146">transcribe: pistas y</text>
+    <text class="txt" x="770" y="164">texto para el podcast.</text>
+  </g>
+
+  <text class="txt" x="470" y="200" text-anchor="middle" style="font-size:12px;fill:#6b665c">La grabación la hace el navegador de cada uno: el audio no sale de su ordenador hasta que guarda la copia.</text>
+</svg>

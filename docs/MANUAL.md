@@ -137,7 +137,7 @@ Elige tu caso:
 |---|---|
 | **Juegas en el mismo ordenador que tiene Foundry** | Abre `http://localhost:30000` (no la IP). El aviso del panel trae el enlace. |
 | **Foundry en casa del máster y los demás desde sus casas** | Usa **Compartir Foundry** (abajo). |
-| **Foundry en un servidor** (Oracle, etc.) | También **Compartir Foundry**, o un dominio con HTTPS (Caddy). |
+| **Foundry en un servidor** (Oracle, etc.) | También **Compartir Foundry**, o un dominio propio con HTTPS: vale uno gratuito (por ejemplo, DuckDNS) con [Caddy](https://caddyserver.com) delante de Foundry, que saca y renueva el certificado solo. |
 | **Prueba rápida en la misma red, sin HTTPS** | En Chrome: `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → añade la dirección de Foundry → **Relaunch**. Solo para pruebas. |
 
 ### Compartir Foundry (túnel HTTPS gratuito)

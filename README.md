@@ -5,8 +5,8 @@
 <p align="center"><strong>Convierte tu partida de Foundry VTT en pistas de audio, transcripción y recuerdos.</strong><br>Voces por separado · Música, ambiente y efectos · Copia ZIP por participante</p>
 
 <p align="center">
-  <strong>Foundry V13 · Chrome / Edge · Windows / Mac · En desarrollo</strong><br><br>
-  <a href="#empezar">Instalar</a> · <a href="#windows-mac">Windows y Mac</a> · <a href="#grabar">Grabar</a> · <a href="#procesar">Procesar</a> · <a href="docs/MANUAL.md">Manual completo</a>
+  <strong>Foundry V13 · Chrome / Edge · Windows / Mac / Linux · En desarrollo</strong><br><br>
+  <a href="#empezar">Instalar</a> · <a href="#windows-mac">Windows, Mac y Linux</a> · <a href="#grabar">Grabar</a> · <a href="#procesar">Procesar</a> · <a href="docs/MANUAL.md">Manual completo</a>
 </p>
 
 > [!IMPORTANT]
@@ -22,6 +22,8 @@ Cada persona graba **su propio micrófono en su navegador**. El máster que prep
 |---|---|---|
 | Graba, pausa y marca momentos. | Cada persona guarda su ZIP. | Obtén pistas para editar y una transcripción. |
 
+<p align="center"><img src="docs/imagenes/flujo.svg" alt="Cinco pasos: el máster prepara, todos aceptan, el máster inicia y todos graban a la vez, cada uno guarda su copia ZIP y cualquiera procesa" width="100%"></p>
+
 <a id="empezar"></a>
 
 ## 1 · Prepara Foundry una sola vez
@@ -35,12 +37,12 @@ Cada persona graba **su propio micrófono en su navegador**. El máster que prep
 2. Abre tu mundo y activa **MR · Chronicle** en **Gestionar módulos**. Pon contraseña a los usuarios, especialmente al máster, **antes de compartir el acceso**.
 3. Descarga [**MR-Chronicle-herramientas.zip**](https://github.com/ManuRomera/mr-chronicle/releases/latest/download/MR-Chronicle-herramientas.zip) y **extráelo**. Conserva sus carpetas juntas: `servidor`, `instalar` y `post`. Solo quien aloja Foundry necesita abrir el túnel; solo quien procese el audio necesita el instalador de postproducción.
 
-Si GitHub pide acceso al repositorio, entra con una cuenta autorizada. El propietario puede facilitar el paquete de herramientas directamente a los demás.
+El repositorio es público: no hace falta cuenta de GitHub para descargar el módulo ni el paquete de herramientas.
 
 <a id="foundry-en-casa-https-gratis-con-un-túnel"></a>
 <a id="windows-mac"></a>
 
-## 2 · Abre la mesa: Windows y Mac
+## 2 · Abre la mesa: Windows, Mac y Linux
 
 **¿Tu proveedor ya te da una dirección `https://`?** Úsala y pasa al apartado 3: no necesitas este túnel. **¿Foundry corre en tu ordenador y entráis desde distintas casas?** Sigue esta tabla en el ordenador que ejecuta Foundry.
 
@@ -51,6 +53,8 @@ Si GitHub pide acceso al repositorio, entra con una cuenta autorizada. El propie
 | **3. Indica el puerto** | Pulsa Intro para **30000**, o escribe el puerto configurado en Foundry. | Pulsa Intro para **30000**, o escribe el puerto configurado en Foundry. |
 | **4. Copia el enlace** | Espera a que aparezca una dirección `https://…trycloudflare.com`. | Espera a que aparezca una dirección `https://…trycloudflare.com`. |
 | **5. Entra y comparte** | Ábrela en **Chrome o Edge**, entra como máster y envíala a los jugadores. | Ábrela en **Chrome o Edge**, entra como máster y envíala a los jugadores. |
+
+**Linux** (o un servidor, como la capa gratuita de Oracle): en una terminal, `bash servidor/compartir-foundry.command`. El resto es igual.
 
 La primera apertura descarga el programa del túnel y necesita Internet. **Mantén abiertos Foundry y la ventana del túnel hasta que todos hayan guardado su copia.** La aplicación de Foundry puede alojar el mundo, pero para grabarte debes entrar desde el navegador.
 
@@ -81,6 +85,33 @@ La primera apertura descarga el programa del túnel y necesita Internet. **Mant�
 5. **Finalizar y guardar.** Pulsa **Finalizar**. Cada persona, también el máster, pulsa **Guardar copia (.zip)**, elige dónde guardarla y espera la confirmación. Subid todos los ZIP a la misma carpeta compartida de Drive, MEGA o similar.
 6. **Cerrar.** Confirma que están las copias de todos antes de cerrar Foundry o el túnel. Conservadlas hasta comprobar el resultado del procesado.
 
+<details>
+<summary><strong>Así se ve en Foundry: capturas de una sesión de prueba</strong></summary>
+
+**Preparar (máster) y aceptar (cada jugador):**
+
+<table>
+  <tr>
+    <td><img src="docs/imagenes/panel-maestro.jpg" alt="Panel del máster con las pistas de Foundry a elegir" width="100%"></td>
+    <td><img src="docs/imagenes/panel-jugador.jpg" alt="Panel del jugador con el medidor del micro y los consentimientos" width="100%"></td>
+  </tr>
+</table>
+
+**Iniciar (cuenta atrás en todas las pantallas) y durante la grabación:**
+
+<table>
+  <tr>
+    <td><img src="docs/imagenes/cuenta-atras.jpg" alt="Cuenta atrás de cinco segundos sobre la mesa de Foundry" width="100%"></td>
+    <td><img src="docs/imagenes/panel-grabando.jpg" alt="Panel durante la grabación, con reloj, MB guardados y la lista de participantes" width="100%"></td>
+  </tr>
+</table>
+
+**Al finalizar:**
+
+<img src="docs/imagenes/panel-entrega.jpg" alt="Panel con los botones Guardar copia (.zip) y Entregar al servidor" width="50%">
+
+</details>
+
 **Antes de empezar:** usad auriculares y una sola pestaña por persona, evitad incógnito y desactivad la suspensión del equipo. Para cuatro horas, calculad unos **1,4 GB por voz** y **2,3 GB para el máster con tres canales Opus**, más espacio para la copia ZIP. Si avisa de que usa WAV para esos canales, el máster puede necesitar **unos 9,7 GB**, más la copia.
 
 <details>
@@ -106,6 +137,8 @@ Las entregas quedan en `Data/mr-chronicle/<sesión>/<usuario>/`. Quien procese d
 | **2. Reúne la sesión** | Crea una carpeta y coloca dentro los ZIP de todos, **sin descomprimirlos**. | Crea una carpeta y coloca dentro los ZIP de todos, **sin descomprimirlos**. |
 | **3. Procesa** | Abre `instalar/Procesar sesion (Windows).bat`, arrastra la carpeta a la ventana y pulsa Intro. | Abre `instalar/procesar.command`, arrastra la carpeta a la ventana y pulsa Intro. |
 | **4. Revisa** | Al terminar, abre `salida/informe.md` dentro de esa carpeta. | Al terminar, abre `salida/informe.md` dentro de esa carpeta. |
+
+**Linux:** `bash instalar/instalar-linux.sh` una vez, y después `bash instalar/procesar.command`.
 
 La instalación descarga aproximadamente 2 GB, incluido el modelo de voz. **Espera a que las comprobaciones del instalador indiquen que está todo disponible.** El procesado puede tardar bastante según el equipo; no hace falta mantener abierto Foundry ni el túnel.
 
