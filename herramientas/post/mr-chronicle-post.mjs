@@ -18,6 +18,9 @@
  *   --formato <f>      Formato de las pistas: flac (por defecto, sin pérdida, ~3 veces menos
  *                      que wav), wav u opus (lo más pequeño, con pérdida mínima)
  *   --con-bruta        Guardar también la voz sin limpiar (el original ya está en la entrega)
+ *   --normalizar       Igualar el volumen de las voces (EBU R128, -19 LUFS) para el podcast
+ *   --temporal <dir>   Carpeta de trabajo (por defecto, dentro de la de salida). Hace falta sitio:
+ *                      ~1,6 veces el audio sin comprimir de la sesión
  *   --comprobar        Solo comprobar que están instalados los programas y el modelo
  *
  * Necesita ffmpeg; para limpiar, deep-filter (DeepFilterNet); para transcribir, whisper-cli.
@@ -28,13 +31,14 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import zlib from "node:zlib";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { parseArgs } from "node:util";
 import {
   leerNDJSON, regresion, segmentosWhisper, marcarEcos, tramosDeVoz, ajustarAVoz, corregir,
   transcripcionMD, subtitulosSRT, etiquetasAudacity, reloj, corregirReinicios, mediana
 } from "./lib.mjs";
 import { extraerZip, crc32 } from "./zip.mjs";
+import { huecosOgg, cabeceraOpus } from "./ogg.mjs";
 
 const { values: op, positionals } = parseArgs({
   allowPositionals: true,
@@ -45,6 +49,8 @@ const { values: op, positionals } = parseArgs({
     "sin-whisper": { type: "boolean", default: false },
     formato: { type: "string" },
     "con-bruta": { type: "boolean", default: false },
+    normalizar: { type: "boolean", default: false },
+    temporal: { type: "string" },
     comprobar: { type: "boolean", default: false }
   }
 });
@@ -83,15 +89,18 @@ if (op.comprobar) {
 }
 
 if (!positionals[0]) {
-  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--formato flac|wav|opus] [--con-bruta] [--sin-ruido] [--sin-whisper]\n       mr-chronicle-post --comprobar");
+  console.error("Uso: mr-chronicle-post <carpeta-sesion> [--salida dir] [--config campana.json] [--formato flac|wav|opus] [--con-bruta] [--normalizar] [--temporal dir] [--sin-ruido] [--sin-whisper]\n       mr-chronicle-post --comprobar");
   process.exit(1);
 }
 
 const SESION = path.resolve(positionals[0]);
 const SALIDA = path.resolve(op.salida ?? path.join(SESION, "salida"));
 // Temporal propio de esta ejecución: dos procesados a la vez no se pisan, y se borra al salir.
-const TMP = path.join(SALIDA, `.tmp-${process.pid}-${Date.now()}`);
+const BASE_TMP = path.resolve(op.temporal ?? SALIDA);
+const TMP = path.join(BASE_TMP, `.tmp-${process.pid}-${Date.now()}`);
 process.on("exit", () => fs.rmSync(TMP, { recursive: true, force: true }));
+// Ctrl‑C, cierre de la terminal o `kill`: salir con normalidad para que se borre el temporal.
+for (const señal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(señal, () => process.exit(130));
 const rutaConfig = buscarConfig(SESION);
 const config = rutaConfig ? JSON.parse(fs.readFileSync(rutaConfig, "utf8")) : {};
 if (rutaConfig) console.log(`Configuración: ${rutaConfig}`);
@@ -105,11 +114,43 @@ const aviso = t => { avisos.push(t); console.warn(`⚠ ${t}`); };
 const paso = t => console.log(`\n▸ ${t}`);
 const zlibRapido = Boolean(zlib.crc32); // con Node reciente el CRC es rápido: se comprueba todo
 
+/** Como `ejecutar`, pero sin bloquear: permite limpiar varias voces a la vez. */
+const ejecutarAsync = (bin, args) => new Promise((resolve, reject) => {
+  const p = spawn(programa(bin), args, { stdio: ["ignore", "ignore", "pipe"] });
+  let err = "";
+  p.stderr.on("data", d => { err = (err + d).slice(-2000); });
+  p.on("error", reject);
+  p.on("close", c => c === 0 ? resolve() : reject(new Error(`${bin} terminó con error ${c}: ${err}`)));
+});
 const ejecutar = (bin, args) => execFileSync(programa(bin), args, { stdio: ["ignore", "ignore", "pipe"], maxBuffer: 1 << 26 });
 function detectarSilencios(archivo) {
   // silencedetect informa por stderr.
   const r = spawnSync(programa("ffmpeg"), ["-hide_banner", "-nostats", "-i", archivo, "-af", `silencedetect=noise=${config.umbralSilencioDb ?? -40}dB:d=0.5`, "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
   return r.status === 0 ? r.stderr : null;
+}
+/** Inserta silencio (muestras s16le) en las posiciones dadas, reescribiendo `raw` por bloques. */
+function rellenarHuecos(raw, huecos, canales) {
+  const paso = 2 * canales;
+  const nuevo = `${raw}.relleno`;
+  const entrada = fs.openSync(raw, "r"), salida = fs.openSync(nuevo, "w");
+  const buf = Buffer.alloc(1 << 22);
+  let leido = 0;
+  const copiar = hasta => {
+    while (leido < hasta) {
+      const n = fs.readSync(entrada, buf, 0, Math.min(buf.length, hasta - leido), leido);
+      if (!n) break;
+      fs.writeSync(salida, buf, 0, n);
+      leido += n;
+    }
+  };
+  for (const h of [...huecos].sort((a, b) => a.pos - b.pos)) {
+    copiar(Math.max(0, h.pos) * paso);
+    let falta = h.muestras * paso;
+    while (falta > 0) { const n = Math.min(buf.length, falta); fs.writeSync(salida, Buffer.alloc(n), 0, n); falta -= n; }
+  }
+  copiar(Infinity);
+  fs.closeSync(entrada); fs.closeSync(salida);
+  fs.renameSync(nuevo, raw);
 }
 const slug = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -119,6 +160,13 @@ for (const f of ["stems", "transcript.json", "transcript.md", "transcript.srt", 
   fs.rmSync(path.join(SALIDA, f), { recursive: true, force: true });
 }
 fs.mkdirSync(path.join(SALIDA, "stems"), { recursive: true });
+// Temporales de ejecuciones que murieron sin limpiar (su proceso ya no existe).
+fs.mkdirSync(BASE_TMP, { recursive: true });
+for (const nombre of fs.readdirSync(BASE_TMP)) {
+  const pid = Number(nombre.match(/^\.tmp-(\d+)-\d+$/)?.[1]);
+  if (!pid) continue;
+  try { process.kill(pid, 0); } catch (e) { if (e.code === "ESRCH") fs.rmSync(path.join(BASE_TMP, nombre), { recursive: true, force: true }); }
+}
 fs.mkdirSync(TMP, { recursive: true });
 
 // ─── 1. Leer las entregas ─────────────────────────────────────────────────
@@ -231,18 +279,25 @@ for (const p of participantes) {
       // Música y efectos: trozos consecutivos de un único flujo Ogg Opus. Se pegan (por partes:
       // nunca todo en memoria) y se decodifican.
       if (trozos[0].n !== 1) { aviso(`${p.etiqueta} ${prefijo}: falta el primer trozo, que tiene las cabeceras. Se omite esta pista.`); continue; }
-      const huecos = trozos.filter((t, i) => i && t.n !== trozos[i - 1].n + 1);
-      // ponytail: un hueco en Ogg no se puede rellenar con precisión; se avisa. Rellenarlo exigiría
-      // decodificar por segmentos y colocarlos por su gránulo.
-      if (huecos.length) aviso(`${p.etiqueta} ${prefijo}: faltan trozos de la pista de Foundry; a partir del hueco puede ir desplazada.`);
-      canales = fs.readFileSync(path.join(p.dir, trozos[0].archivo)).subarray(0, 64)[37]; // OpusHead: canales
+      const buffers = trozos.map(t => fs.readFileSync(path.join(p.dir, t.archivo)));
+      let cab;
+      try { cab = cabeceraOpus(buffers[0].subarray(0, 128)); }
+      catch (e) { aviso(`${p.etiqueta} ${prefijo}: ${e.message}. Se omite esta pista.`); continue; }
+      canales = cab.canales;
       fsNominal = 48000;
+      // Los números de secuencia de las páginas delatan los trozos que faltan; el gránulo, cuánto duraban.
+      const huecos = huecosOgg(buffers, cab.preSkip);
       const ogg = path.join(TMP, `${p.userId}-${prefijo}.ogg`);
       const fd = fs.openSync(ogg, "w");
       for (const t of trozos) fs.writeSync(fd, fs.readFileSync(path.join(p.dir, t.archivo)));
       fs.closeSync(fd);
       ejecutar("ffmpeg", ["-v", "error", "-y", "-i", ogg, "-f", "s16le", "-ar", "48000", "-ac", String(canales), raw]);
       fs.rmSync(ogg);
+      if (huecos.length) {
+        rellenarHuecos(raw, huecos, canales);
+        const total = huecos.reduce((t, h) => t + h.muestras, 0);
+        aviso(`${p.etiqueta} ${prefijo}: faltaban ${huecos.length} trozo(s) de la pista de Foundry (${(total / 48000).toFixed(1)} s); se han rellenado con silencio en su sitio.`);
+      }
       frames = fs.statSync(raw).size / (2 * canales);
     } else {
       const cab = fs.readFileSync(path.join(p.dir, trozos[0].archivo)).subarray(0, 44);
@@ -296,6 +351,7 @@ for (const p of participantes) {
       }
     }
     const ppm = (r.fsReal / fsNominal - 1) * 1e6;
+    if ((r.anclasUsadas ?? 0) < 4 && frames / fsNominal > 300) aviso(`${p.etiqueta} ${prefijo}: solo ${r.anclasUsadas ?? 0} anclas útiles para ${Math.round(frames / fsNominal / 60)} min de audio; la deriva calculada es poco fiable. Revisa la alineación a oído.`);
     if (r.hueco) aviso(`${p.etiqueta} ${prefijo}: error residual de ${r.residuoMax.toFixed(0)} ms. Probablemente se perdieron muestras; revisa la alineación a oído.`);
     else if (Math.abs(ppm) > 300) aviso(`${p.etiqueta} ${prefijo}: deriva de ${ppm.toFixed(0)} ppm, anormalmente alta.`);
     tramos.push({ p, prefijo, tipo: prefijo.split("-")[0], canales, fsNominal, frames, r, ppm, raw });
@@ -311,6 +367,18 @@ const fin = reinicio || !Number.isFinite(sesion.finServerMs) ? finTramos : Math.
 const duracion = (fin - t0) / 1000;
 console.log(`  Sesión: ${reloj(duracion * 1000)}`);
 
+{
+  // Sitio en disco: el audio sin comprimir de todas las pistas, más la versión limpia.
+  const necesario = tramos.reduce((t, x) => t + x.frames * x.canales * 2, 0) * 1.6;
+  let libre = null;
+  try { const st = fs.statfsSync(BASE_TMP); libre = st.bavail * st.bsize; } catch { /* Node antiguo: no se puede mirar */ }
+  const GB = n => (n / 1e9).toFixed(1);
+  if (libre !== null && libre < necesario) {
+    console.error(`Falta sitio en disco: hacen falta unos ${GB(necesario)} GB libres y hay ${GB(libre)} GB en ${BASE_TMP}. Libera espacio o usa --temporal <carpeta en otro disco>.`);
+    process.exit(1);
+  }
+  console.log(`  Espacio de trabajo: ~${GB(necesario)} GB (libres: ${libre === null ? "?" : GB(libre) + " GB"})`);
+}
 paso("Alineando pistas");
 // Varios tramos de una misma pista (alguien recargó el navegador) se colocan cada uno en su sitio
 // y luego se juntan en una.
@@ -367,14 +435,22 @@ if (!op["sin-ruido"]) {
   paso("Limpiando ruido (DeepFilterNet)");
   if (!hay("deep-filter")) aviso("No está deep-filter (DeepFilterNet). Las voces se quedan sin limpiar. Ejecuta el instalador o usa --sin-ruido.");
   else {
-    for (const v of voces) {
-      const destino = path.join(TMP, "limpio");
-      // -D compensa el retardo del filtro: sin él, la voz limpia se desplazaría unos ms.
-      ejecutar("deep-filter", ["-D", "-a", String(config.reduccionRuidoDb ?? 30), "-o", destino, v.bruto]);
-      v.limpio = path.join(TMP, `${nombreStem(v)}.limpio.wav`);
-      fs.renameSync(path.join(destino, path.basename(v.bruto)), v.limpio);
-      console.log(`  ${v.p.etiqueta}`);
-    }
+    // Varias voces a la vez (DeepFilterNet usa poco CPU por voz). El original se borra en cuanto
+    // existe la versión limpia, salvo con --con-bruta: así el disco no se llena.
+    const destino = path.join(TMP, "limpio");
+    const hilos = Math.max(1, Math.min(voces.length, Math.floor(os.cpus().length / 2), 4));
+    let siguiente = 0;
+    await Promise.all(Array.from({ length: hilos }, async () => {
+      while (siguiente < voces.length) {
+        const v = voces[siguiente++];
+        // -D compensa el retardo del filtro: sin él, la voz limpia se desplazaría unos ms.
+        await ejecutarAsync("deep-filter", ["-D", "-a", String(config.reduccionRuidoDb ?? 30), "-o", destino, v.bruto]);
+        v.limpio = path.join(TMP, `${nombreStem(v)}.limpio.wav`);
+        fs.renameSync(path.join(destino, path.basename(v.bruto)), v.limpio);
+        if (!GUARDAR_BRUTA) { fs.rmSync(v.bruto); v.bruto = null; }
+        console.log(`  ${v.p.etiqueta}`);
+      }
+    }));
   }
 }
 
@@ -422,21 +498,23 @@ if (!op["sin-whisper"]) {
 paso(`Exportando (pistas en ${FORMATO})`);
 
 /** Pasa una pista de trabajo (WAV) al formato final de stems/ (o stems/no-publicar/). */
-function codificar(entrada, nombre, canales, carpeta = "stems") {
+function codificar(entrada, nombre, canales, carpeta = "stems", normalizar = false) {
   const opciones = {
     wav: ["-c:a", "pcm_s16le"],
     flac: ["-c:a", "flac"],
     opus: ["-c:a", "libopus", "-b:a", canales === 2 ? "160k" : "96k"]
   }[FORMATO];
   fs.mkdirSync(path.join(SALIDA, carpeta), { recursive: true });
-  ejecutar("ffmpeg", ["-v", "error", "-y", "-i", entrada, ...opciones, path.join(SALIDA, carpeta, `${nombre}.${FORMATO}`)]);
+  // loudnorm trabaja a 192 kHz por dentro: se vuelve a 48 kHz para que todas las pistas sigan alineadas.
+  const filtro = normalizar ? ["-af", "loudnorm=I=-19:TP=-1.5:LRA=11,aresample=48000"] : [];
+  ejecutar("ffmpeg", ["-v", "error", "-y", "-i", entrada, ...filtro, ...opciones, path.join(SALIDA, carpeta, `${nombre}.${FORMATO}`)]);
 }
 for (const pista of pistas.values()) {
   const canales = pista.tipo === "voz" ? 1 : 2;
   // La voz de quien no autorizó publicar va aparte, para no montarla por error.
   const carpeta = pista.tipo === "voz" && !pista.p.publica ? "stems/no-publicar" : "stems";
-  codificar(pista.limpio ?? pista.bruto, nombreStem(pista), canales, carpeta);
-  if (pista.tipo === "voz" && pista.limpio && GUARDAR_BRUTA) codificar(pista.bruto, `${nombreStem(pista)}.bruta`, canales, carpeta);
+  codificar(pista.limpio ?? pista.bruto, nombreStem(pista), canales, carpeta, pista.tipo === "voz" && op.normalizar);
+  if (pista.tipo === "voz" && pista.limpio && pista.bruto) codificar(pista.bruto, `${nombreStem(pista)}.bruta`, canales, carpeta);
 }
 
 const escribir = (nombre, contenido) => fs.writeFileSync(path.join(SALIDA, nombre), contenido);

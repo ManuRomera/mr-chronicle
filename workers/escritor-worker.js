@@ -97,6 +97,7 @@ function escribirEn(bytes, at) {
 }
 
 let totalBytes = 0; // todo lo escrito en esta pista, para mostrarlo en el panel
+let pendiente = 0;  // bytes recibidos que aún no se han escrito: si crece, el disco no da abasto
 
 function escribirBytes(bytes) {
   const desplazamiento = cfg.formato === "wav" ? 44 : 0;
@@ -109,7 +110,7 @@ function escribirBytes(bytes) {
 let ultimoAviso = 0;
 function informar() {
   const t = Date.now();
-  if (t - ultimoAviso > 2000) { ultimoAviso = t; self.postMessage({ escrito: totalBytes }); }
+  if (t - ultimoAviso > 2000) { ultimoAviso = t; self.postMessage({ escrito: totalBytes, cola: pendiente }); }
 }
 
 function cerrar() {
@@ -128,8 +129,10 @@ const encolar = tarea => (cola = cola.then(tarea).catch(error =>
 
 function escribir(msg) {
   if (cfg.formato === "opus") return escribirOpus(msg);
+  pendiente += msg.datos.byteLength;
   encolar(async () => {
     let datos = new Uint8Array(msg.datos.buffer, msg.datos.byteOffset, msg.datos.byteLength);
+    pendiente -= datos.length;
     const bytesPorTrozo = framesPorTrozo * cfg.canales * 2;
     while (datos.length) {
       if (!trozo) await abrir();
@@ -145,6 +148,8 @@ function escribir(msg) {
 
 async function escribirOpus(msg) {
   const frames = msg.datos.length / cfg.canales;
+  // Si el codificador no da abasto, la cola crece sin límite en memoria: se hace visible en el panel.
+  pendiente = codificador.encodeQueueSize * 960 * cfg.canales * 2;
   if (frames) {
     const audio = new AudioData({
       format: "s16", sampleRate: 48000, numberOfChannels: cfg.canales, numberOfFrames: frames,

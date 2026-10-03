@@ -15,6 +15,7 @@ const RUTA = foundry.utils.getRoute("modules/mr-chronicle/workers");
 const INTERVALO_ANCLAS_MS = 30_000;
 const PLAZO_ARRANQUE_MS = 8000;
 const PLAZO_CIERRE_MS = 8000;
+const COLA_MAX_BYTES = 32_000_000; // ~5 min de voz esperando al disco: algo va mal
 const espera = ms => new Promise(r => setTimeout(r, ms));
 const contextosConWorklet = new WeakSet();
 
@@ -79,7 +80,7 @@ export class Pista {
         if (data.aviso) ui.notifications.warn(`MR · Chronicle: ${data.aviso}`);
         if (data.error) falla(data.error);
         if (data.cerrado) this.cerrado?.(data);
-        if (data.escrito) { this.ultimaEscritura = performance.now(); this.bytes = data.escrito; }
+        if (data.escrito) { this.ultimaEscritura = performance.now(); this.bytes = data.escrito; this.cola = data.cola ?? 0; }
       };
     });
     this.worker.postMessage({
@@ -150,6 +151,9 @@ export class Pista {
     // De paso, se vigila que la grabación siga llegando al disco.
     if (this.grabando && performance.now() - (this.ultimaEscritura ?? this.inicioPerf) > 20_000) {
       this.fallo(`la pista de ${this.tipo} no se está guardando en el disco. Avisa al máster y revisa el espacio libre.`);
+    }
+    if (this.grabando && this.cola > COLA_MAX_BYTES) {
+      this.fallo(`el disco no da abasto con la pista de ${this.tipo} (${Math.round(this.cola / 1e6)} MB esperando). Cierra otras pestañas o programas; si sigue, la pestaña podría quedarse sin memoria.`);
     }
     const medida = this.medir();
     const reloj = await sincronizar();

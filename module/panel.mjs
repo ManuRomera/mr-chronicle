@@ -4,7 +4,7 @@
  * el resto (para no cerrar desplegables ni borrar lo que se está escribiendo).
  */
 import { ConMemoria } from "./memoria.mjs";
-import { chronicle, ID, reloj, CANALES } from "./sesion.mjs";
+import { chronicle, ID, reloj, CANALES, ESTADO_CADUCA_MS } from "./sesion.mjs";
 
 /** La última elección de pistas de Foundry del máster, para proponerla en la siguiente sesión. */
 const CLAVE_CANALES = `${ID}.canales`;
@@ -66,8 +66,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       preparar: Panel.#preparar,
       fase: Panel.#fase,
       cerrarSesion: () => chronicle.cerrarSesion(),
-      aceptar: Panel.#aceptar,
-      retirar: () => chronicle.retirar(),
+      retirar: Panel.#retirar,
       probar: Panel.#probar,
       pausarMia: (e, b) => chronicle.pausar(b.dataset.valor === "1"),
       marcar: Panel.#marcar,
@@ -77,7 +76,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
   };
 
   static PARTS = {
-    principal: { template: `${RUTA}/panel.hbs` },
+    principal: { template: `${RUTA}/panel.hbs`, templates: [`${RUTA}/canales.hbs`] },
     mesa: { template: `${RUTA}/mesa.hbs` }
   };
 
@@ -109,6 +108,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       })(),
       yo,
       manifiesto: chronicle.manifiesto,
+      sinNombres: (await microsDisponibles()).some(d => !d.label),
       micros: (await microsDisponibles()).map((d, i) => ({ id: d.deviceId, nombre: d.label || `Micrófono ${i + 1}`, elegido: d.deviceId === elegido })),
       reloj: reloj(yo.segundos),
       fase: s?.fase,
@@ -122,6 +122,14 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
         ...e,
         porcentaje: e.total ? Math.round((100 * e.hechos) / e.total) : 0
       },
+      herramientas: (() => {
+        const version = game.modules.get(ID)?.version;
+        return {
+          ruta: `Data/modules/${ID}/herramientas`,
+          zip: `https://github.com/ManuRomera/${ID}/releases/download/v${version}/MR-Chronicle-herramientas.zip`,
+          version
+        };
+      })(),
       libreGB,
       pocoEspacio: libreGB !== null && libreGB < (chronicle.soyGrabadorFoundry && chronicle.canalesFoundry.length ? 3 : 2)
     };
@@ -133,9 +141,10 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       const e = chronicle.estados.get(u.id);
       let clase = "gris", texto = "Sin respuesta";
       // Un estado viejo no es prueba de que siga grabando.
-      if (e && !u.isSelf && performance.now() - e.recibido > 10_000) [clase, texto] = ["gris", "Sin comunicación"];
+      if (e && !u.isSelf && performance.now() - e.recibido > ESTADO_CADUCA_MS) [clase, texto] = ["gris", "Sin comunicación"];
       else if (e?.problema) [clase, texto] = ["rojo", PROBLEMAS[e.problema] ?? "No puede grabar"];
       else if (e?.error) [clase, texto] = ["rojo", e.error];
+      else if (e?.grabando && e.esperaClic) [clase, texto] = ["ambar", `Grabando · ${reloj(e.segundos ?? 0)} · pistas de Foundry esperando un clic en la mesa`];
       else if (e?.grabando && !e.microEncendido) [clase, texto] = ["ambar", `Grabando · ${reloj(e.segundos ?? 0)} · micro apagado`];
       else if (e?.grabando) [clase, texto] = e.pausa ? ["ambar", `En pausa · ${reloj(e.segundos ?? 0)}`] : ["verde", `Grabando · ${reloj(e.segundos ?? 0)} · ${e.guardadoMB ?? 0} MB`];
       else if (e?.cierreSinConfirmar) [clase, texto] = ["ambar", "Cierre sin confirmar: que guarde la copia (.zip)"];
@@ -160,7 +169,13 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
   /** Una sola vez: los cambios de las casillas de canales se escuchan en el formulario. */
   async _onFirstRender(contexto, opciones) {
     await super._onFirstRender?.(contexto, opciones);
+    // Las casillas de consentimiento y el micro se guardan al cambiarlos: no hay botón que olvidar.
     this.element.addEventListener("change", evento => {
+      if (["grabar", "publicar", "micro"].includes(evento.target.name)) {
+        const f = new FormData(this.element);
+        if (evento.target.name === "micro" && f.get("grabar") !== "on") return chronicle.probarMicro(f.get("micro") || undefined);
+        return chronicle.aceptar({ grabar: f.get("grabar") === "on", publicar: f.get("publicar") === "on", deviceId: f.get("micro") || undefined });
+      }
       if (!evento.target.name?.startsWith("canal-") || chronicle.sesion?.fase !== "preparada") return;
       const canales = Object.fromEntries(Object.keys(CANALES).map(c =>
         [c, this.element.querySelector(`[name='canal-${c}']`)?.checked ?? false]));
@@ -186,6 +201,7 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
       if (barra) {
         barra.style.width = `${Math.min(100, Math.sqrt(nivel) * 100)}%`;
         barra.dataset.saturado = nivel > 0.98;
+        barra.parentElement.setAttribute("aria-valuenow", Math.round(Math.sqrt(nivel) * 100));
       }
       if (++ciclo % 8) return; // los textos cambian despacio: cada ~0,5 s basta
       const yo = chronicle.miEstado;
@@ -244,14 +260,19 @@ export class Panel extends ConMemoria(HandlebarsApplicationMixin(ApplicationV2))
     await chronicle.fase(fase);
   }
 
-  static async #aceptar() {
-    const f = new FormData(this.element);
-    await chronicle.aceptar({ grabar: f.get("grabar") === "on", publicar: f.get("publicar") === "on", deviceId: f.get("micro") || undefined });
+  static async #retirar() {
+    const ok = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Dejar de grabar" },
+      content: "<p>Se detiene tu grabación y se retira tu consentimiento. Lo ya grabado se conserva. Para volver a grabar en esta sesión tendrás que aceptar de nuevo.</p>"
+    });
+    if (ok) await chronicle.retirar();
   }
 
   static async #probar() {
     const f = new FormData(this.element);
     await chronicle.probarMicro(f.get("micro") || undefined);
+    micros = null; // con permiso concedido, el navegador ya enseña los nombres de los micros
+    this.render();
   }
 
   static async #marcar(evento, boton) {

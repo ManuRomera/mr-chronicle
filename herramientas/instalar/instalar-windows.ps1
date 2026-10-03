@@ -16,6 +16,13 @@ function Bajar($Url, $Destino) {
   Write-Host "  descargando $(Split-Path $Url -Leaf)"
   Invoke-WebRequest -Uri $Url -OutFile $Destino -UseBasicParsing
 }
+function Verificar($Archivo, $Huella) {
+  # Las descargas con version fija se comprueban con su huella SHA-256: lo que no coincide no se instala.
+  if ((Get-FileHash -Algorithm SHA256 $Archivo).Hash.ToLower() -ne $Huella) {
+    Remove-Item $Archivo -Force
+    throw "La descarga $(Split-Path $Archivo -Leaf) no coincide con la huella esperada. No se instala."
+  }
+}
 function Descomprimir($Zip) {
   $Destino = Join-Path $Tmp ([guid]::NewGuid())
   Expand-Archive -Path $Zip -DestinationPath $Destino -Force
@@ -45,8 +52,11 @@ try {
   Write-Host "> whisper.cpp $WhisperVersion"
   if (Test-Path "$Bin\whisper-cli.exe") { Write-Host "  ya estaba" } else {
     # Con tarjeta NVIDIA, la version con CUDA transcribe muchisimo mas rapido (pero ocupa 640 MB).
-    $Paquete = if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) { "whisper-cublas-12.4.0-bin-x64.zip" } else { "whisper-bin-x64.zip" }
+    $Cuda = [bool](Get-Command nvidia-smi -ErrorAction SilentlyContinue)
+    $Paquete = if ($Cuda) { "whisper-cublas-12.4.0-bin-x64.zip" } else { "whisper-bin-x64.zip" }
+    $HuellaWhisper = if ($Cuda) { "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c" } else { "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a" }
     Bajar "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$Paquete" "$Tmp\whisper.zip"
+    Verificar "$Tmp\whisper.zip" $HuellaWhisper
     $d = Descomprimir "$Tmp\whisper.zip"
     $Release = (Get-ChildItem $d -Recurse -Filter whisper-cli.exe | Select-Object -First 1).DirectoryName
     Copy-Item "$Release\*" $Bin -Recurse -Force
@@ -55,6 +65,7 @@ try {
   Write-Host "> DeepFilterNet $DeepFilterVersion"
   if (Test-Path "$Bin\deep-filter.exe") { Write-Host "  ya estaba" } else {
     Bajar "https://github.com/Rikorose/DeepFilterNet/releases/download/v$DeepFilterVersion/deep-filter-$DeepFilterVersion-x86_64-pc-windows-msvc.exe" "$Bin\deep-filter.exe"
+    Verificar "$Bin\deep-filter.exe" "75e11fa16445f560cb6b021521ddb89e89270d13b83089705d98776f58fd7915"
   }
 
   Write-Host "> Modelo de Whisper large-v3-turbo (1,6 GB; si se corta, vuelve a abrir el instalador y sigue donde iba)"
@@ -65,6 +76,7 @@ try {
     # curl.exe viene con Windows 10 y 11, y sabe continuar una descarga cortada.
     & curl.exe -fL -C - -o "$Modelo.parte" $ModeloUrl
     if ($LASTEXITCODE -ne 0) { throw "No se pudo descargar el modelo." }
+    Verificar "$Modelo.parte" "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
     Move-Item "$Modelo.parte" $Modelo
   }
 

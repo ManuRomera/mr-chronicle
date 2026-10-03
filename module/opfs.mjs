@@ -71,17 +71,3 @@ export async function borrar(ruta) {
   const padre = await carpeta(ruta.slice(0, -1), false);
   await padre.removeEntry(ruta.at(-1), { recursive: true });
 }
-
-/** Sesiones guardadas en este navegador para este usuario. */
-export async function sesionesLocales(userId) {
-  const sesiones = [];
-  try {
-    const raiz = await carpeta([RAIZ], false);
-    for await (const [id, handle] of raiz.entries()) {
-      if (handle.kind !== "directory") continue;
-      try { await handle.getDirectoryHandle(userId); sesiones.push(id); }
-      catch { /* sesión de otro usuario en este navegador */ }
-    }
-  } catch { /* nunca se ha grabado aquí */ }
-  return sesiones.sort();
-}

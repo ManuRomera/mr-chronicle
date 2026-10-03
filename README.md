@@ -10,7 +10,7 @@
 </p>
 
 > [!IMPORTANT]
-> **Versión 0.2.0 · Experimental.** Comprobado en Foundry 13.351; V14 pendiente. Haz una prueba corta con tu grupo antes de una partida importante. La validación en sesiones reales largas sigue pendiente.
+> **Versión 0.3.0 · Experimental.** Comprobado en Foundry 13.351; V14 pendiente. Haz una prueba corta con tu grupo antes de una partida importante. La validación en sesiones reales largas sigue pendiente.
 
 ## Una mesa. Todas sus pistas.
 
@@ -76,10 +76,10 @@ La primera apertura descarga el programa del túnel y necesita Internet. **Mant�
 ## 3 · Graba la partida en seis pasos
 
 <p align="center"><img src="docs/imagenes/detalles-grabacion.png" alt="Detalles del panel: selección de pistas y controles para marcar momentos, cortar y pausar el micrófono." width="960"></p>
-<p align="center"><sub>Vistas de las plantillas reales de la versión 0.2.0, con datos de demostración. Pulsa la imagen para ampliarla.</sub></p>
+<p align="center"><sub>Vistas de las plantillas reales de la versión 0.2.0 (desde la 0.3.0 no hay botón «Guardar»: las casillas se guardan al marcarlas), con datos de demostración. Pulsa la imagen para ampliarla.</sub></p>
 
 1. **Preparar.** Pulsa el indicador **MR · Chronicle** de la parte superior. Pon nombre a la sesión, elige música, ambiente y/o efectos y pulsa **Preparar sesión**.
-2. **Comprobar cada micro.** Todos, incluido el máster, eligen micrófono, pulsan **Probar micro** y permiten su uso en el navegador. Hablad y comprobad que capta sonido. Marcad el consentimiento para grabar; publicar es una autorización distinta. Pulsad **Guardar**.
+2. **Comprobar cada micro.** Todos, incluido el máster, eligen micrófono, pulsan **Probar micro** y permiten su uso en el navegador. Hablad y comprobad que capta sonido. Marcad el consentimiento para grabar; publicar es una autorización distinta. Se guarda solo al marcarlo.
 3. **Iniciar.** Revisa la lista de participantes y pulsa **Iniciar grabación**. Hay una cuenta atrás de cinco segundos. El máster debe aceptar también para que se graben sus pistas de Foundry.
 4. **Vigilar y marcar.** Comprueba que avanzan el reloj y los **MB guardados**. **Marcar momento** señala una escena; **Cortar esto** deja una nota para el editor, no borra audio. **Pausar mi micro** silencia tu voz; **Pausar a todos** pausa la sesión.
 5. **Finalizar y guardar.** Pulsa **Finalizar**. Cada persona, también el máster, pulsa **Guardar copia (.zip)**, elige dónde guardarla y espera la confirmación. Subid todos los ZIP a la misma carpeta compartida de Drive, MEGA o similar.

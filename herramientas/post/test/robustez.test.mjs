@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import { escribirZip } from "../../../module/zip.mjs";
 import { extraerZip } from "../zip.mjs";
 import { corregirReinicios } from "../lib.mjs";
+import { paginas } from "../ogg.mjs";
 
 const SCRIPT = path.join(import.meta.dirname, "..", "mr-chronicle-post.mjs");
 const T0 = 1_000_000;
@@ -127,3 +128,20 @@ test("la corrección de reinicios deja igual lo que no se reinició", () => {
   assert.deepEqual(c.corregir({ serverMs: T0 + 10, epochMs: 1.7e12 + 10 }).serverMs, T0 + 10);
   assert.equal(c.corregir({ serverMs: 5 }).serverMs, 5); // sin epochMs (datos antiguos): intacto
 });
+
+test("si falta un trozo de una pista Ogg de Foundry, se rellena con silencio y lo siguiente no se desplaza", conRaiz(raiz => {
+  const d = participante(raiz, "a", { nombre: "Ana", duracion: 10 });
+  fs.writeFileSync(path.join(d, "voz-1-000001.wav"), wav(10));
+  const ogg = path.join(raiz, "origen.ogg");
+  execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "aevalsrc='if(between(t,9,9.01),0.9,0)':s=48000:d=10", "-ac", "1",
+    "-c:a", "libopus", "-frame_duration", "20", "-page_duration", "20000", ogg]);
+  const buf = fs.readFileSync(ogg);
+  const ps = paginas(buf);
+  const corte = [0, 102, 202, 302, 402, ps.length].map(i => (ps[i] ? ps[i].o : buf.length));
+  // Trozo n = de corte[n-1] a corte[n]; falta el 3.
+  for (const n of [1, 2, 4, 5]) fs.writeFileSync(path.join(d, `musica-1-${String(n).padStart(6, "0")}.ogg`), buf.subarray(corte[n - 1], corte[n]));
+  fs.writeFileSync(path.join(d, "musica-1-anclas.txt"), [0, 5, 10].map(sg => JSON.stringify({ frame: sg * 48000, serverMs: T0 + sg * 1000, epochMs: 1.7e12 + sg * 1000, rttMs: 1 })).join("\n"));
+  procesar(raiz);
+  assert.ok(Math.abs(primerClic(path.join(raiz, "salida/stems/foundry-musica.wav")) - 9) < 0.05);
+  assert.match(fs.readFileSync(path.join(raiz, "salida/informe.md"), "utf8"), /faltaban 1 trozo/);
+}));

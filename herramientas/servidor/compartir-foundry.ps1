@@ -14,8 +14,15 @@ $Cf = if ($env:MRC_CLOUDFLARED) { $env:MRC_CLOUDFLARED } else { Join-Path $Bin "
 
 if (-not (Test-Path $Cf)) {
   Write-Host "> Descargando cloudflared $CloudflaredVersion (solo la primera vez)..."
-  Invoke-WebRequest -UseBasicParsing -OutFile $Cf `
+  $Descarga = "$Cf.parte"
+  Invoke-WebRequest -UseBasicParsing -OutFile $Descarga `
     "https://github.com/cloudflare/cloudflared/releases/download/$CloudflaredVersion/cloudflared-windows-amd64.exe"
+  # Huella SHA-256 de esa version: lo que no coincide no se instala.
+  if ((Get-FileHash -Algorithm SHA256 $Descarga).Hash.ToLower() -ne "f096265ec2fcbe9bb6e2d64268db167ced3fcbb83d894bdb9e2fcdb26f2ea7e2") {
+    Remove-Item $Descarga -Force
+    throw "La descarga no coincide con la huella esperada. No se instala."
+  }
+  Move-Item $Descarga $Cf
 }
 
 $Puerto = if ($args[0]) { $args[0] } else { Read-Host "En que puerto esta Foundry? [30000]" }

@@ -1,6 +1,6 @@
 <div class="mrc-principal">
   {{#if problema}}
-  <div class="mrc-aviso rojo">
+  <div class="mrc-aviso rojo" role="alert">
     <p>{{problema}}</p>
     {{#if sinHttps}}
     <p><strong>¿Foundry está en este mismo ordenador?</strong> Ábrelo por <a href="{{sinHttps.local}}">{{sinHttps.local}}</a> y podrás grabar.</p>
@@ -25,11 +25,7 @@
       <label class="mrc-campo">Nombre de la sesión
         <input type="text" name="nombre" placeholder="Curse of Strahd 26">
       </label>
-      <fieldset class="mrc-canales">
-        <legend>Pistas de Foundry que se grabarán</legend>
-        {{#each canales}}<label class="mrc-check"><input type="checkbox" name="canal-{{id}}" {{checked marcado}}> {{nombre}}</label>{{/each}}
-        <p class="mrc-nota">Lo que no marques no se graba, no se entrega y no se procesa. Tu voz se graba aparte, si aceptas más abajo.</p>
-      </fieldset>
+      {{> "modules/mr-chronicle/templates/canales.hbs"}}
       <div class="mrc-botones"><button type="button" data-action="preparar" class="mrc-principal-btn">Preparar sesión</button></div>
       {{else}}
       <div class="mrc-botones">
@@ -43,11 +39,7 @@
       <p class="mrc-nota">Pistas de Foundry: {{#if canalesElegidos}}{{canalesElegidos}}{{else}}ninguna{{/if}}.</p>
       {{/if}}
       {{#if (eq fase "preparada")}}
-      <fieldset class="mrc-canales">
-        <legend>Pistas de Foundry que se grabarán</legend>
-        {{#each canales}}<label class="mrc-check"><input type="checkbox" name="canal-{{id}}" {{checked marcado}}> {{nombre}}</label>{{/each}}
-        <p class="mrc-nota">Lo que no marques no se graba, no se entrega y no se procesa. Tu voz se graba aparte, si aceptas más abajo.</p>
-      </fieldset>
+      {{> "modules/mr-chronicle/templates/canales.hbs"}}
       <p class="mrc-nota">{{#if consentimientos.nadie}}Nadie ha aceptado todavía: cada participante tiene que aceptar en su panel antes de iniciar.{{else}}Han aceptado {{consentimientos.aceptados}} de {{consentimientos.activos}}.{{#unless consentimientos.todos}} A quien no acepte no se le grabará.{{/unless}}{{/if}}</p>
       {{/if}}
       {{/unless}}
@@ -61,8 +53,8 @@
     {{#if yo.grabando}}
       <p class="mrc-grande">{{#if yo.pausa}}❚❚ En pausa{{else}}<span class="mrc-punto"></span> Grabando{{/if}} · <span data-mrc-reloj>{{reloj}}</span></p>
       <p class="mrc-nota" data-mrc-guardado>{{yo.guardadoMB}} MB guardados en este ordenador</p>
-      <div class="mrc-nivel"><span></span></div>
-      <p class="mrc-micro" data-mrc-micro></p>
+      <div class="mrc-nivel" role="meter" aria-label="Nivel de tu micrófono" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+      <p class="mrc-micro" data-mrc-micro role="status"></p>
       <label class="mrc-campo">Marcador (opcional)
         <input type="text" name="marcador" placeholder="Momento para el tráiler">
       </label>
@@ -84,18 +76,19 @@
           {{#each micros}}<option value="{{id}}" {{#if elegido}}selected{{/if}}>{{nombre}}</option>{{else}}<option value="">Micrófono predeterminado</option>{{/each}}
         </select>
       </label>
-      <div class="mrc-nivel"><span></span></div>
-      <p class="mrc-micro" data-mrc-micro></p>
+      {{#if sinNombres}}<p class="mrc-nota">Si no ves los nombres de tus micrófonos, pulsa <strong>Probar micro</strong> y permite el acceso.</p>{{/if}}
+      <div class="mrc-nivel" role="meter" aria-label="Nivel de tu micrófono" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+      <p class="mrc-micro" data-mrc-micro role="status"></p>
       <label class="mrc-check"><input type="checkbox" name="grabar" {{checked yo.acepta}}> Acepto que se grabe mi voz en esta sesión</label>
       <label class="mrc-check"><input type="checkbox" name="publicar" {{checked yo.publica}}> Acepto que se publique en el podcast</label>
       <div class="mrc-botones">
         <button type="button" data-action="probar">Probar micro</button>
-        <button type="button" data-action="aceptar" class="mrc-principal-btn">Guardar</button>
       </div>
-      {{#if yo.acepta}}<p class="mrc-nota">Listo. No tienes que pulsar nada más: cuando el máster inicie, verás una cuenta atrás y empezarás a grabar a la vez que los demás.</p>{{else}}<p class="mrc-nota">Marca lo que aceptas y pulsa <strong>Guardar</strong>. Es el máster quien inicia la grabación.</p>{{/if}}
+      {{#if yo.acepta}}<p class="mrc-nota">Listo, ya está guardado. No tienes que pulsar nada más: cuando el máster inicie, verás una cuenta atrás y empezarás a grabar a la vez que los demás.</p>{{else}}<p class="mrc-nota">Marca <strong>Acepto que se grabe mi voz</strong> y quedas listo (se guarda solo). Es el máster quien inicia la grabación.</p>{{/if}}
     {{/if}}
-    {{#if pocoEspacio}}<p class="mrc-aviso ambar">Queda poco espacio para grabar ({{libreGB}} GB). Cuatro horas ocupan unos 1,4 GB.</p>{{/if}}
-    {{#if yo.error}}<p class="mrc-aviso rojo">{{yo.error}}</p>{{/if}}
+    {{#if pocoEspacio}}<p class="mrc-aviso ambar" role="status">Queda poco espacio para grabar ({{libreGB}} GB). Cuatro horas ocupan unos 1,4 GB.</p>{{/if}}
+    {{#if yo.esperaClic}}<p class="mrc-aviso ambar" role="status">Tu voz ya se graba, pero la música, el ambiente y los efectos de Foundry esperan a que hagas <strong>un clic en la mesa</strong> (el navegador no deja sonar audio antes).</p>{{/if}}
+    {{#if yo.error}}<p class="mrc-aviso rojo" role="alert">{{yo.error}}</p>{{/if}}
   </section>
   {{/unless}}{{/if}}
 
@@ -105,11 +98,11 @@
     <h3>Guarda y entrega tu grabación</h3>
     {{#if direccionCambiante}}<p class="mrc-aviso ambar"><strong>Guarda la copia ahora.</strong> Esta dirección (túnel) cambia la próxima vez, y el navegador solo te enseña la grabación desde la dirección en la que se hizo.</p>{{/if}}
     {{#if entrega}}{{#if (eq entrega.sesionId s.id)}}
-      <div class="mrc-progreso"><span style="width: {{entrega.porcentaje}}%"></span></div>
+      <div class="mrc-progreso" role="progressbar" aria-label="Progreso de la entrega" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{entrega.porcentaje}}"><span style="width: {{entrega.porcentaje}}%"></span></div>
       <p class="mrc-nota">{{entrega.hechos}} de {{entrega.total}} archivos</p>
-      {{#if entrega.error}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/if}}
-      {{#if (eq entrega.fin "zip")}}<p class="mrc-aviso verde">Copia guardada. Súbela a la carpeta compartida del grupo (Drive, MEGA…) o pásasela a quien vaya a procesar.</p>{{/if}}
-      {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde">¡Entregada! Está en el servidor y se ha comprobado el tamaño de cada archivo.</p>{{/if}}
+      {{#if entrega.error}}<p class="mrc-aviso rojo" role="alert">{{entrega.error}}</p>{{/if}}
+      {{#if (eq entrega.fin "zip")}}<p class="mrc-aviso verde" role="status">Copia guardada. Súbela a la carpeta compartida del grupo (Drive, MEGA…) o pásasela a quien vaya a procesar.</p>{{/if}}
+      {{#if (eq entrega.fin "subir")}}<p class="mrc-aviso verde" role="status">¡Entregada! Está en el servidor y se ha comprobado el tamaño de cada archivo.</p>{{/if}}
     {{/if}}{{/if}}
     {{#unless entrega.enCurso}}
     <p class="mrc-nota"><strong>Guardar copia (.zip)</strong> crea un único archivo con tu grabación ({{actual.mb}} MB). Súbelo a la carpeta compartida del grupo: quien procese la sesión lo usa tal cual, sin descomprimirlo.</p>
@@ -118,6 +111,7 @@
       <button type="button" data-action="entregar" data-modo="subir" {{disabled (not puedeSubir)}}>Entregar al servidor</button>
     </div>
     {{#unless puedeSubir}}<p class="mrc-nota">Para «Entregar al servidor», el máster tiene que activar Subir archivos para tu rol en Configurar permisos.</p>{{/unless}}
+    {{#if actual.sinConfirmar}}<p class="mrc-aviso ambar" role="status">El cierre de esta grabación no pudo confirmarse (¿se cerró la pestaña a la fuerza?). Lo grabado hasta entonces está: guarda la copia (.zip) igualmente.</p>{{/if}}
     {{#if (or actual.guardada actual.subida)}}<button type="button" data-action="borrarLocal" class="mrc-enlace">Borrar la grabación de este navegador</button>{{/if}}
     {{/unless}}
   </section>
@@ -128,12 +122,12 @@
   <section class="mrc-bloque">
     <h3>Grabaciones en este navegador</h3>
     <p class="mrc-nota">De sesiones anteriores o ya cerradas. Guarda la copia de las que falten por entregar.</p>
-    {{#if entrega.error}}{{#unless (eq entrega.sesionId s.id)}}<p class="mrc-aviso rojo">{{entrega.error}}</p>{{/unless}}{{/if}}
+    {{#if entrega.error}}{{#unless (eq entrega.sesionId s.id)}}<p class="mrc-aviso rojo" role="alert">{{entrega.error}}</p>{{/unless}}{{/if}}
     <ul class="mrc-biblioteca">
       {{#each otras}}
       <li>
         <span class="mrc-nombre">{{nombre}}</span>
-        <span class="mrc-texto">{{mb}} MB · {{#if guardada}}copia guardada{{else}}{{#if subida}}entregada{{else}}<strong>sin guardar</strong>{{/if}}{{/if}}</span>
+        <span class="mrc-texto">{{mb}} MB · {{#if guardada}}copia guardada{{else}}{{#if subida}}entregada{{else}}<strong>sin guardar</strong>{{/if}}{{/if}} · {{consentimiento}}{{#if sinConfirmar}} · <strong>cierre sin confirmar</strong>{{/if}}</span>
         <span class="mrc-botones">
           <button type="button" data-action="entregar" data-modo="zip" data-sesion="{{sesionId}}">Guardar copia</button>
           {{#if (or guardada subida)}}<button type="button" data-action="borrarLocal" data-sesion="{{sesionId}}">Borrar</button>{{/if}}
@@ -141,6 +135,21 @@
       </li>
       {{/each}}
     </ul>
+  </section>
+  {{/if}}
+
+  {{! ─── Herramientas de postproducción ─── }}
+  {{#if esGM}}
+  <section class="mrc-bloque">
+    <details data-memoria="herramientas">
+      <summary><strong>Procesar la sesión (herramientas)</strong></summary>
+      <p class="mrc-nota">Las herramientas viajan con este módulo. En el ordenador donde corre Foundry están en la carpeta de datos de Foundry, dentro de <code>{{herramientas.ruta}}</code> (la ruta completa de «Data» aparece al arrancar Foundry, en la línea «User Data Directory»).</p>
+      <ul class="mrc-nota">
+        <li><code>instalar/</code>: el instalador de tu sistema (doble clic) deja ffmpeg, DeepFilterNet y Whisper listos.</li>
+        <li><code>post/mr-chronicle-post.mjs</code>: la postproducción. Con las copias .zip de todos en una carpeta: <code>node mr-chronicle-post.mjs &lt;carpeta&gt;</code>.</li>
+      </ul>
+      <p class="mrc-nota">¿Procesa otra persona? Que descargue <a href="{{herramientas.zip}}" target="_blank" rel="noopener">MR-Chronicle-herramientas.zip</a> (versión {{herramientas.version}}).</p>
+    </details>
   </section>
   {{/if}}
 </div>

@@ -132,7 +132,7 @@ export async function guardarCopia({ rutaLocal, sesionId, carpeta, nombreArchivo
   const archivos = await grabacionLocal(rutaLocal);
   const inv = await inventario(archivos);
   const entradas = [
-    ...archivos.map(({ nombre, archivo }) => ({ nombre: `${sesionId}/${carpeta}/${nombre}`, archivo })),
+    ...archivos.map(({ nombre, archivo }, i) => ({ nombre: `${sesionId}/${carpeta}/${nombre}`, archivo, crc: inv.archivos[i].crc32 })),
     { nombre: `${sesionId}/${carpeta}/inventario.json`, archivo: new Blob([JSON.stringify(inv, null, 2)]) }
   ];
   const w = await destino.createWritable();

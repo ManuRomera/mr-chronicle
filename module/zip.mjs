@@ -30,7 +30,7 @@ function fechaDos(d = new Date()) {
 
 /**
  * @param {(bytes: Uint8Array) => Promise<void>} escribir  destino (p. ej. un FileSystemWritableFileStream)
- * @param {{nombre: string, archivo: Blob}[]} entradas
+ * @param {{nombre: string, archivo: Blob, crc?: number}[]} entradas
  * @param {object} [o]
  * @param {(hechos: number, total: number) => void} [o.progreso]
  * @param {number} [o.limite]  a partir de qué valor se usa ZIP64 (solo se cambia en las pruebas)
@@ -44,9 +44,9 @@ export async function escribirZip(escribir, entradas, { progreso = () => {}, lim
   let posicion = 0;
   const salida = async bytes => { await escribir(bytes); posicion += bytes.length; };
 
-  for (const [i, { nombre, archivo }] of entradas.entries()) {
+  for (const [i, { nombre, archivo, crc: crcConocido }] of entradas.entries()) {
     const datos = new Uint8Array(await archivo.arrayBuffer());
-    const crc = crc32(datos);
+    const crc = crcConocido ?? crc32(datos); // el inventario ya lo calculó: no se repite
     const nombreBytes = utf8.encode(nombre);
     const offset = posicion;
 

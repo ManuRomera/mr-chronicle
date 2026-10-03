@@ -197,3 +197,51 @@ test("los estados de otra sesión o de usuarios inexistentes se ignoran", async 
   assert.equal(chronicle.estados.get("otro").acepta, true);
   assert.ok(Number.isFinite(chronicle.estados.get("otro").recibido));
 });
+
+test("dos pestañas del mismo usuario: la que graba no la pisa la que está callada, y mi propio estado no se sobrescribe", async () => {
+  reiniciar("grabando");
+  chronicle.estados.clear();
+  await chronicle.alRecibir({ tipo: "estado", estado: { userId: "otro", pestana: "A", sesionId: "s", grabando: true } });
+  await chronicle.alRecibir({ tipo: "estado", estado: { userId: "otro", pestana: "B", sesionId: "s", grabando: false } });
+  assert.equal(chronicle.estados.get("otro").grabando, true);
+  // Si es la misma pestaña, sí se actualiza.
+  await chronicle.alRecibir({ tipo: "estado", estado: { userId: "otro", pestana: "A", sesionId: "s", grabando: false } });
+  assert.equal(chronicle.estados.get("otro").grabando, false);
+  // Un estado mío que llega de otra pestaña no pisa el de esta.
+  chronicle.estados.set("u", { userId: "u", grabando: true, recibido: 0 });
+  await chronicle.alRecibir({ tipo: "estado", estado: { userId: "u", pestana: "X", sesionId: "s", grabando: false } });
+  assert.equal(chronicle.estados.get("u").grabando, true);
+});
+
+test("el máster ve que las pistas de Foundry esperan un clic", () => {
+  reiniciar("grabando");
+  sesion.canales = { musica: true };
+  sesion.grabadorFoundry = "u";
+  chronicle.pistas = [Object.assign(pistaFalsa("voz"), { grabando: true })];
+  game.audio.locked = true;
+  assert.equal(chronicle.miEstado.esperaClic, true);
+  game.audio.locked = false;
+  assert.equal(chronicle.miEstado.esperaClic, false);
+  chronicle.pistas = [];
+});
+
+test("la biblioteca se guarda un rato y se renueva al borrar o entregar", async () => {
+  reiniciar();
+  opfs = { "mr-chronicle": { s: { u: { "voz-1-000001.wav": { size: 2_000_000 } } } } };
+  const a = await chronicle.biblioteca();
+  assert.equal(a.length, 1);
+  delete opfs["mr-chronicle"].s;
+  assert.equal((await chronicle.biblioteca()).length, 1); // aún en caché
+  chronicle.olvidarBiblioteca();
+  assert.equal((await chronicle.biblioteca()).length, 0);
+});
+
+test("la cola del escritor se avisa en el hilo principal cuando el disco no da abasto", async () => {
+  const mensajes = [];
+  const p = new Pista({ ctx: { sampleRate: 48000 }, fuente: {}, canales: 1, tipo: "voz" });
+  p.grabando = true; p.cola = 40_000_000; p.ultimaEscritura = performance.now();
+  p.medir = () => null;
+  p.fallo = m => mensajes.push(m);
+  await p.anclar();
+  assert.match(mensajes[0], /no da abasto/);
+});

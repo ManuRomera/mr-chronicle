@@ -11,7 +11,7 @@
  */
 import { pistaMicro, probarAlmacenamiento } from "./grabadora.mjs";
 import { pistasFoundry, registrarMusica } from "./foundry-audio-tap.mjs";
-import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, existe, listar, siFalla } from "./opfs.mjs";
+import { RAIZ, escribirJSON, leerJSON, anadirLinea, borrar, listar, siFalla } from "./opfs.mjs";
 import { ahora, sincronizar } from "./tiempo.mjs";
 import { subir, guardarCopia, crearCarpetas } from "./entrega.mjs";
 
@@ -19,7 +19,8 @@ export const ID = "mr-chronicle";
 const SOCKET = `module.${ID}`;
 const ESTADO_CADA_MS = 3000;
 const CUENTA_ATRAS_MS = 5000;
-const ESTADO_CADUCA_MS = 10_000;
+export const ESTADO_CADUCA_MS = 10_000; // pasado este tiempo sin noticias, un participante figura como «sin comunicación»
+const CACHE_BIBLIOTECA_MS = 15_000;
 const TRAMO = /^(?:voz|musica|ambiente|efectos)-(\d+)-\d{6}\./;
 
 /** Nombre de carpeta y de archivo legible y único: «Ana-Ru20». */
@@ -43,6 +44,7 @@ class Chronicle {
   ocupado = false;
   operacion = 0;        // cada inicio o parada la incrementa: un inicio pendiente ve que ya no vale
   esperandoCarpeta = new Map();
+  idPestana = crypto.randomUUID(); // distingue dos pestañas del mismo usuario
   entregas = {};        // qué se ha guardado o entregado de la sesión activa (entregas.json, solo local)
 
   get sesion() { return game.settings.get(ID, "sesion"); }
@@ -93,6 +95,8 @@ class Chronicle {
       this.refrescar();
     });
     game.socket.on(SOCKET, msg => this.alRecibir(msg));
+    // Cerrar o recargar con la grabación en marcha la corta: el navegador pide confirmación.
+    window.addEventListener("beforeunload", e => { if (this.grabando) { e.preventDefault(); e.returnValue = ""; } });
     this.indicador();
     setInterval(() => this.emitirEstado(), ESTADO_CADA_MS);
     setInterval(() => { if (this.grabando || this.faltaParaEmpezar) this.indicador(); }, 250); // el reloj avanza a la vista
@@ -363,7 +367,9 @@ class Chronicle {
     if (pistas.includes(this.micro)) this.micro = null; // detener() ya soltó el micro
     this.liberarCandado();
     if (pistas.length && this.manifiesto) {
-      await this.guardarManifiesto({ estado: confirmados.every(Boolean) ? "finalizada" : "cierre-sin-confirmar" }).catch(() => {});
+      const avisos = [...new Set(pistas.flatMap(p => p.errores ?? []))];
+      await this.guardarManifiesto({ estado: confirmados.every(Boolean) ? "finalizada" : "cierre-sin-confirmar", diagnostico: { avisos } }).catch(() => {});
+      this.olvidarBiblioteca();
     }
   }
 
@@ -422,6 +428,7 @@ class Chronicle {
       const entregas = { ...(await leerJSON(rutaLocal, "entregas.json")), [modo]: new Date().toISOString() };
       await escribirJSON(rutaLocal, "entregas.json", entregas).catch(() => {});
       if (sesionId === this.sesion?.id) this.entregas = entregas;
+      this.olvidarBiblioteca();
     } catch (error) {
       this.entrega = error.name === "AbortError" ? null : { sesionId, modo, ...this.entrega, enCurso: false, error: error.message };
     }
@@ -451,12 +458,28 @@ class Chronicle {
     });
     if (!ok) return;
     await borrar([RAIZ, sesionId, game.user.id]);
+    this.olvidarBiblioteca();
     if (sesionId === this.sesion?.id) Object.assign(this, { manifiesto: null, entrega: null });
     this.refrescar();
   }
 
   /** Grabaciones guardadas en este navegador, de cualquier sesión (también cerradas). */
   async biblioteca() {
+    // Mientras se graba, el tamaño cambia a cada segundo: no se guarda.
+    if (!this.grabando && this.bibliotecaCache && performance.now() - this.bibliotecaCache.t < CACHE_BIBLIOTECA_MS) return this.bibliotecaCache.lista;
+    const version = this.bibliotecaVersion ?? 0;
+    const lista = await this.leerBiblioteca();
+    // Si algo la invalidó mientras se leía, esta lista ya es vieja y no se guarda.
+    if (!this.grabando && version === (this.bibliotecaVersion ?? 0)) this.bibliotecaCache = { t: performance.now(), lista };
+    return lista;
+  }
+
+  olvidarBiblioteca() {
+    this.bibliotecaCache = null;
+    this.bibliotecaVersion = (this.bibliotecaVersion ?? 0) + 1;
+  }
+
+  async leerBiblioteca() {
     const lista = [];
     let raiz;
     try { raiz = await (await navigator.storage.getDirectory()).getDirectoryHandle(RAIZ); } catch { return lista; }
@@ -470,14 +493,12 @@ class Chronicle {
         sesionId, nombre: m?.sesion?.nombre ?? sesionId,
         mb: Math.round(archivos.reduce((t, a) => t + a.archivo.size, 0) / 1e6),
         guardada: Boolean(entregas.zip), subida: Boolean(entregas.subir || m?.entregado === "subir"),
+        sinConfirmar: m?.estado === "cierre-sin-confirmar",
+        consentimiento: m?.consentimiento?.grabar ? (m.consentimiento.publicar ? "grabar y publicar" : "grabar, no publicar") : "sin consentimiento",
         activa: sesionId === this.sesion?.id
       });
     }
     return lista.sort((a, b) => b.sesionId.localeCompare(a.sesionId));
-  }
-
-  async hayLocal() {
-    return this.sesion ? existe(this.ruta) : false;
   }
 
   // ─── Estado compartido ──────────────────────────────────────────────────
@@ -491,6 +512,11 @@ class Chronicle {
       const e = msg.estado;
       // Solo estados de la sesión actual y de usuarios que existen; se guarda cuándo llegó.
       if (!e || !usuarioValido(e.userId) || e.sesionId !== this.sesion?.id) return;
+      // El propio estado ya se guarda en local; el de otra pestaña mía no debe pisarlo.
+      if (e.userId === game.user.id) return;
+      // Dos pestañas del mismo usuario: manda la que graba mientras la otra esté callada.
+      const previo = this.estados.get(e.userId);
+      if (previo && previo.pestana !== e.pestana && previo.grabando && !e.grabando && performance.now() - previo.recibido < ESTADO_CADUCA_MS) return;
       this.estados.set(e.userId, { ...e, recibido: performance.now() });
       this.panel?.refrescarMesa();
     } else if (msg.tipo === "hola") {
@@ -513,6 +539,7 @@ class Chronicle {
     const voz = this.pistas.find(p => p.tipo === "voz");
     return {
       userId: game.user.id,
+      pestana: this.idPestana,
       sesionId: this.sesion?.id ?? null,
       acepta: Boolean(this.manifiesto?.consentimiento.grabar),
       publica: Boolean(this.manifiesto?.consentimiento.publicar),
@@ -520,6 +547,9 @@ class Chronicle {
       nivel: this.micro?.nivel ?? 0,
       grabando: this.grabando,
       pausa: this.pausaPropia || this.sesion?.fase === "pausada",
+      // Graba la voz pero las pistas de Foundry esperan el primer clic en la mesa.
+      esperaClic: this.grabando && this.soyGrabadorFoundry && this.canalesFoundry.length > 0
+        && !this.pistas.some(p => p.tipo !== "voz") && Boolean(game.audio.locked),
       cierreSinConfirmar: this.manifiesto?.estado === "cierre-sin-confirmar",
       segundos: voz?.segundos ?? 0,
       // Lo escrito de verdad en el disco: la prueba de que se está grabando.
@@ -583,6 +613,7 @@ class Chronicle {
     if (!el) {
       el = document.createElement("div");
       el.id = "mr-chronicle-cuenta";
+      el.setAttribute("role", "status");
       document.body.append(el);
     }
     clearInterval(this.intervaloCuenta);

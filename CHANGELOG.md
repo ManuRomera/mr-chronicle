@@ -1,5 +1,33 @@
 # Cambios
 
+## 0.3.0 · Auditoría del 03-10-2026
+
+Corrige los puntos de `docs/AUDITORIA.md`. **Sigue en desarrollo (WIP)**, pendiente de una partida real larga.
+
+**Grabación**
+- Si el disco no da abasto, se avisa en pantalla antes de que la pestaña se quede sin memoria.
+- Dos pestañas del mismo usuario: el máster ve el estado de la que graba, no el de la que está callada.
+- Cerrar o recargar la pestaña mientras se graba pide confirmación.
+- El máster ve que las pistas de Foundry esperan un clic en la mesa (en su panel y en la lista de participantes).
+- Las casillas de consentimiento y el micro se guardan al cambiarlos (ya no hay botón «Guardar»).
+- «Dejar de grabar» pide confirmación.
+- Panel: el micro sin nombres explica cómo verlos; la biblioteca muestra el consentimiento y «cierre sin confirmar» y se guarda 15 s en lugar de recorrerse en cada repintado; sección «Procesar la sesión» con la ruta de las herramientas y su descarga.
+- Accesibilidad: roles `meter`/`progressbar`/`status`/`alert`, foco visible, sin animación con «reducir movimiento» y mejor contraste.
+- La copia .zip no recalcula el CRC que ya calculó el inventario.
+- Se anotan en el manifiesto los avisos de cada pista (`diagnostico`).
+
+**Postproducción**
+- Un trozo que falta en una pista de música, ambiente o efectos se rellena con silencio en su sitio (antes solo se avisaba y la pista quedaba desplazada).
+- Ctrl‑C o cierre de la terminal ya no dejan temporales; los de ejecuciones muertas se limpian al empezar.
+- Se comprueba el espacio libre antes de empezar (`--temporal` para usar otro disco); el original de cada voz se borra en cuanto existe la versión limpia.
+- DeepFilterNet limpia varias voces a la vez.
+- `--normalizar`: iguala el volumen de las voces.
+- Aviso si hay pocas anclas para la duración de la pista; se valida la cabecera OpusHead.
+
+**Instaladores y publicación**
+- Las descargas con versión fija (DeepFilterNet, Whisper, modelo, cloudflared) se comprueban con su huella SHA-256.
+- La publicación falla si el CHANGELOG no tiene la versión.
+
 ## 0.2.0 · Robustez
 
 Corrige los fallos de la auditoría del 30-09-2026. **Sigue en desarrollo (WIP)**, pendiente de una partida real larga.

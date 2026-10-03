@@ -47,6 +47,9 @@ Módulo de Foundry VTT (`mr-chronicle`) + herramienta de postproducción en Node
 - El paso por MediaStream retrasa las pistas de Foundry unos 100 ms respecto a las voces.
 - Whisper pone el inicio de una frase al principio de su ventana de 30 s si antes hubo silencio. El VAD de whisper.cpp no lo arregla: junta toda la voz en un segmento. Se recortan los tiempos con `silencedetect` sobre la pista limpia (`ajustarAVoz` en `lib.mjs`).
 
+- **Auditoría del 03-10-2026** (v0.3.0): informe y estado de cada punto en `docs/AUDITORIA.md`. Instaladores y túnel con huellas SHA-256 fijas (si se sube la versión de whisper.cpp, DeepFilterNet o cloudflared, hay que recalcularlas: `gh api repos/<repo>/releases/tags/<v> --jq '.assets[]|"\(.name) \(.digest)"'`; DeepFilterNet 0.5.6 no las publica y se calcularon descargando).
+- `publicar.yml` falla si `CHANGELOG.md` no tiene la sección `## <versión>`.
+
 ## Probar
 
 ```bash

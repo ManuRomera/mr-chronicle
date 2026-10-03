@@ -196,7 +196,7 @@ Arriba, en el centro de Foundry. Siempre visible; al hacer clic se abre el panel
 1. Elige tu micro en **Micrófono** y habla: la barra verde debe moverse y debajo debe poner **«Micro encendido · captando sonido»**.
 2. Marca **Acepto que se grabe mi voz en esta sesión**.
 3. Si quieres, marca **Acepto que se publique en el podcast**. Son dos cosas distintas.
-4. Pulsa **Guardar**. Se hace una prueba de escritura; si sale un aviso rojo, léelo (ver [sección 11](#11-si-algo-falla)).
+4. No hay botón de guardar: al marcar la casilla se guarda y se hace una prueba de escritura; si sale un aviso rojo, léelo (ver [sección 11](#11-si-algo-falla)).
 
 **Los jugadores no tienen que pulsar nada más:** es el máster quien inicia la grabación, aunque luego cada uno grabe en su ordenador.
 
@@ -327,6 +327,8 @@ node herramientas/post/mr-chronicle-post.mjs <carpeta-sesión> --salida <otra-ca
 | `--sin-whisper` | No transcribe. |
 | `--formato flac\|opus\|wav` | Formato de las pistas (por defecto, `flac`). |
 | `--con-bruta` | Guarda también la voz sin limpiar, alineada. |
+| `--normalizar` | Iguala el volumen de las voces (EBU R128, −19 LUFS) en los stems. |
+| `--temporal <dir>` | Carpeta de trabajo, si la de salida no tiene sitio (hacen falta ~1,6 veces el audio sin comprimir de la sesión; la herramienta lo comprueba antes de empezar). |
 | `--comprobar` | Solo dice qué falta por instalar. |
 
 ### 9.4. Qué hace, por orden

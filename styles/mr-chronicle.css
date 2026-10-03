@@ -138,3 +138,14 @@
 .mr-chronicle .mrc-biblioteca { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .mr-chronicle .mrc-biblioteca li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
 .mr-chronicle .mrc-biblioteca .mrc-botones { grid-column: 1 / -1; }
+
+/* Teclado y movimiento reducido. */
+.mr-chronicle button:focus-visible, .mr-chronicle input:focus-visible, .mr-chronicle select:focus-visible,
+.mr-chronicle a:focus-visible, #mr-chronicle-indicador:focus-visible {
+  outline: 2px solid #8ab4ff; outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mr-chronicle .mrc-punto { animation: none; }
+  .mr-chronicle .mrc-nivel > span, .mr-chronicle .mrc-progreso > span { transition: none; }
+}
+.mr-chronicle .mrc-nota, .mr-chronicle .mrc-texto { color: #b9b5ad; } /* contraste ≥ 7:1 sobre el fondo del bloque */

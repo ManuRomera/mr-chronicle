@@ -1,0 +1,5 @@
+<fieldset class="mrc-canales">
+  <legend>Pistas de Foundry que se grabarán</legend>
+  {{#each canales}}<label class="mrc-check"><input type="checkbox" name="canal-{{id}}" {{checked marcado}}> {{nombre}}</label>{{/each}}
+  <p class="mrc-nota">Lo que no marques no se graba, no se entrega y no se procesa. Tu voz se graba aparte, si aceptas más abajo.</p>
+</fieldset>

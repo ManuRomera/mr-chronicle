@@ -16,13 +16,19 @@ CF="$BIN/cloudflared"
 if [ ! -x "$CF" ]; then
   echo "▸ Descargando cloudflared $CLOUDFLARED_VERSION (solo la primera vez)…"
   base="https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION"
+  # Se baja a un archivo, se comprueba su huella SHA-256 y solo entonces se instala.
+  sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
   case "$(uname -s)-$(uname -m)" in
-    Darwin-arm64)  curl -fL --progress-bar "$base/cloudflared-darwin-arm64.tgz" | tar xz -C "$BIN" ;;
-    Darwin-x86_64) curl -fL --progress-bar "$base/cloudflared-darwin-amd64.tgz" | tar xz -C "$BIN" ;;
-    Linux-x86_64)  curl -fL --progress-bar -o "$CF" "$base/cloudflared-linux-amd64" ;;
-    Linux-aarch64) curl -fL --progress-bar -o "$CF" "$base/cloudflared-linux-arm64" ;;
+    Darwin-arm64)  archivo=cloudflared-darwin-arm64.tgz; huella=587c2cfb1c230fe36c7fa7727da78be459dae028cabe8c001291999350f07095 ;;
+    Darwin-x86_64) archivo=cloudflared-darwin-amd64.tgz; huella=d1155d0837487f261183b15c1eab6c4ebcad9dc49b94675f1524c3564cea3977 ;;
+    Linux-x86_64)  archivo=cloudflared-linux-amd64; huella=77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2 ;;
+    Linux-aarch64) archivo=cloudflared-linux-arm64; huella=aaeb2d7d0da3614634c7e03ab13487a1522c2e79165ed2929cfe23d5e95b326d ;;
     *) echo "Sistema no soportado: $(uname -s) $(uname -m)"; exit 1 ;;
   esac
+  descarga="$(mktemp)"
+  curl -fL --progress-bar -o "$descarga" "$base/$archivo"
+  if [ "$(sha "$descarga")" != "$huella" ]; then echo "✖ La descarga no coincide con la huella esperada. No se instala."; rm -f "$descarga"; exit 1; fi
+  case "$archivo" in *.tgz) tar xz -C "$BIN" -f "$descarga"; rm -f "$descarga" ;; *) mv "$descarga" "$CF" ;; esac
   chmod +x "$CF"
   xattr -d com.apple.quarantine "$CF" 2>/dev/null || true
 fi

@@ -200,10 +200,15 @@ export function ajustarAVoz(segmentos, tramos) {
 }
 
 /** Correcciones fijas de nombres propios que Whisper escribe mal: {"Strath": "Strahd"}. */
+const compiladas = new WeakMap(); // las expresiones se construyen una vez por lista de correcciones
 export function corregir(texto, correcciones = {}) {
-  let t = texto;
-  for (const [mal, bien] of Object.entries(correcciones)) {
-    t = t.replace(new RegExp(`(?<![\\p{L}])${mal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "gu"), bien);
+  let reglas = compiladas.get(correcciones);
+  if (!reglas) {
+    reglas = Object.entries(correcciones).map(([mal, bien]) =>
+      [new RegExp(`(?<![\\p{L}])${mal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "gu"), bien]);
+    compiladas.set(correcciones, reglas);
   }
+  let t = texto;
+  for (const [re, bien] of reglas) t = t.replace(re, bien);
   return t;
 }
