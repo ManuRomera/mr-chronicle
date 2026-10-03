@@ -24,7 +24,7 @@ jobs:
       - name: Notas de la versión
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v v="## $version" '$0==v{p=1;next} /^## /{p=0} p' CHANGELOG.md > dist/notas.md
+          awk -v v="## $version" 'index($0, v)==1{p=1;next} /^## /{p=0} p' CHANGELOG.md > dist/notas.md
           test -s dist/notas.md || { echo "CHANGELOG.md no tiene una sección «## $version»"; exit 1; }
           printf '> **En desarrollo (WIP).** Úsalo para pruebas.\n\n**Manifiesto:** `https://github.com/ManuRomera/mr-chronicle/releases/latest/download/module.json`\n\n' | cat - dist/notas.md > dist/n && mv dist/n dist/notas.md
       - name: Publicar release
