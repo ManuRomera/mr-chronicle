@@ -2,6 +2,14 @@
   <img src="docs/imagenes/portada.png" alt="MR · Chronicle. Tu partida. Todas sus voces. Graba, transcribe, conserva y revive." width="100%">
 </p>
 
+<p align="center">
+  <a href="https://github.com/ManuRomera/mr-chronicle/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ManuRomera/mr-chronicle?include_prereleases&style=for-the-badge&color=d1495b&label=release"></a>
+  <a href="https://foundryvtt.com"><img alt="Foundry VTT V13" src="https://img.shields.io/badge/Foundry%20VTT-V13-57d8c8?style=for-the-badge"></a>
+  <a href="https://github.com/ManuRomera/mr-chronicle/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/ManuRomera/mr-chronicle/total?style=for-the-badge&color=ff7a1f"></a>
+  <img alt="System" src="https://img.shields.io/badge/system-agnostic-2b3245?style=for-the-badge">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-2b3245?style=for-the-badge"></a>
+</p>
+
 <p align="center"><strong>Convierte tu partida de Foundry VTT en pistas de audio, transcripción y recuerdos.</strong><br>Voces por separado · Música, ambiente y efectos · Copia ZIP por participante</p>
 
 <p align="center">
