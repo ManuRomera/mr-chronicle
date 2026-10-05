@@ -1,5 +1,9 @@
 # Cambios
 
+## 0.3.1 · Marca MR
+
+- Añadido el botón «Créditos» en los ajustes del paquete (Manu Romera · Digital RPG Design). No cambia el juego.
+
 ## 0.3.0 · Auditoría del 03-10-2026
 
 Corrige los puntos de `docs/AUDITORIA.md`. **Sigue en desarrollo (WIP)**, pendiente de una partida real larga.
